@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
+import { ChevronDown } from 'lucide-react';
 
 interface ChatMessage {
   id: string;
@@ -18,8 +19,6 @@ interface ChatPanelProps {
   currentUserName: string;
   onMinimize?: () => void;
 }
-
-import { ChevronDown } from 'lucide-react';
 
 const QUICK_EMOJIS = ['😂', '❤️', '😮', '👏', '🔥', '😍', '😡', '💀'];
 
