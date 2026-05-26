@@ -38,6 +38,8 @@ export type RoomMember = {
   photoURL: string;
   online: boolean;
   lastSeen: number | object;
+  isCamOn?: boolean;
+  isMicOn?: boolean;
 };
 
 // ─── SyncService ──────────────────────────────────────────────────────────────
@@ -342,6 +344,33 @@ export class SyncService {
     });
 
     return this.addListener('streamQueue', () => off(queueRef, 'value', handler));
+  }
+
+  // ── Member status update ──
+  async updateMemberStatus(status: { isCamOn?: boolean; isMicOn?: boolean }): Promise<void> {
+    const memberRef = this.roomRef(`members/${this.userId}`);
+    await update(memberRef, status);
+  }
+
+  // ── Reaction Sync ──
+  async sendReaction(emoji: string, senderName: string): Promise<void> {
+    const reactionsRef = this.roomRef('reactions');
+    await set(reactionsRef, {
+      emoji,
+      senderName,
+      timestamp: Date.now() + Math.random(),
+    });
+  }
+
+  onReaction(callback: (emoji: string, senderName: string) => void): () => void {
+    const reactionsRef = this.roomRef('reactions');
+    const handler = onValue(reactionsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        callback(val.emoji, val.senderName);
+      }
+    });
+    return this.addListener('reactions', () => off(reactionsRef, 'value', handler));
   }
 
   // ── Cleanup ───────────────────────────────────────────────────────────────────
