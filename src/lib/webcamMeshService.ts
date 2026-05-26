@@ -23,6 +23,7 @@ export class WebcamMeshService {
   private peers: Map<string, RTCPeerConnection> = new Map();
   private unsubscribers: Map<string, Array<() => void>> = new Map();
   private onStreamChange: (peerUid: string, stream: MediaStream | null) => void;
+  private lastMembers: Record<string, any> = {};
 
   constructor(
     roomCode: string,
@@ -37,7 +38,13 @@ export class WebcamMeshService {
   // Update our local webcam/audio stream
   updateLocalStream(stream: MediaStream | null) {
     this.localStream = stream;
-    // Try to replace tracks on existing connections first
+    
+    // Check if we need to establish or break connections based on new stream state
+    if (this.lastMembers) {
+      this.updateMembers(this.lastMembers);
+    }
+
+    // Also replace tracks on existing connections if stream is active
     this.peers.forEach((pc, peerUid) => {
       const senders = pc.getSenders();
       if (stream && senders.length > 0) {
@@ -51,19 +58,19 @@ export class WebcamMeshService {
             pc.addTrack(track, stream);
           }
         });
-      } else {
-        // No senders yet or stream removed, reconnect
-        this.reconnectPeer(peerUid);
       }
     });
   }
 
   // Update room members list and presence
   updateMembers(members: Record<string, any>) {
-    Object.entries(members).forEach(([peerUid, member]) => {
+    this.lastMembers = members || {};
+    
+    Object.entries(this.lastMembers).forEach(([peerUid, member]) => {
       if (peerUid === this.userId) return;
 
-      const shouldConnect = member.online;
+      // Only connect if the peer is online AND either we have local tracks or they have mic/cam enabled
+      const shouldConnect = member.online && (this.localStream !== null || member.isCamOn || member.isMicOn);
       const hasConnection = this.peers.has(peerUid);
 
       if (shouldConnect && !hasConnection) {
@@ -73,9 +80,10 @@ export class WebcamMeshService {
       }
     });
 
-    // Cleanup peers that are no longer in the members list
+    // Cleanup peers that are no longer online or active
     Array.from(this.peers.keys()).forEach((peerUid) => {
-      if (!members[peerUid]) {
+      const member = this.lastMembers[peerUid];
+      if (!member || !member.online || (this.localStream === null && !member.isCamOn && !member.isMicOn)) {
         this.disconnectPeer(peerUid);
       }
     });
