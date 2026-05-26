@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Mic, MicOff, Video, VideoOff, LogOut, Link2, Copy,
   Check, Users, Settings, ChevronRight, Radio, Gamepad2,
-  Music2, Share2, ChevronLeft, X, Tv2, Disc3,
+  Music2, Share2, ChevronLeft, X, Tv2, Disc3, Maximize2, Send
 } from 'lucide-react';
 import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
@@ -17,6 +17,7 @@ import SelectVideoModal from '@/components/SelectVideoModal';
 import SyncService from '@/lib/syncService';
 import { useChat } from '@/hooks/useChat';
 import { WebRTCStreamService } from '@/lib/webrtcStreamService';
+import { WebcamMeshService } from '@/lib/webcamMeshService';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -225,6 +226,7 @@ export default function RoomPage() {
   const [isCamOn, setIsCamOn] = useState(false);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
+  const [chatMode, setChatMode] = useState<'sidebar' | 'popup'>('sidebar');
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('chat');
   const [reactions, setReactions] = useState<Reaction[]>([]);
   const [isCopied, setIsCopied] = useState(false);
@@ -233,7 +235,9 @@ export default function RoomPage() {
 
   const syncRef = useRef<SyncService | null>(null);
   const videoAreaRef = useRef<HTMLDivElement>(null);
-  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
+  const [peerStreams, setPeerStreams] = useState<Record<string, MediaStream>>({});
+  const webcamMeshRef = useRef<WebcamMeshService | null>(null);
 
   // ── Derived ──
   const memberCount = Object.keys(members).length;
@@ -298,6 +302,15 @@ export default function RoomPage() {
     });
     const unsubQueue = svc.onStreamQueue(setStreamQueue);
 
+    let isFirstReaction = true;
+    const unsubReaction = svc.onReaction((emoji, senderName) => {
+      if (isFirstReaction) {
+        isFirstReaction = false;
+        return;
+      }
+      fireReaction(emoji);
+    });
+
     svc.joinRoom(displayName, user.photoURL ?? '');
 
     return () => {
@@ -307,6 +320,7 @@ export default function RoomPage() {
       unsubWatchMode();
       unsubMembers();
       unsubQueue();
+      unsubReaction();
       svc.cleanup();
     };
   }, [user, code, displayName]);
@@ -356,75 +370,112 @@ export default function RoomPage() {
     }
 
     let active = true;
+    let checkInterval: ReturnType<typeof setInterval>;
 
-    // Delay slightly to ensure video player ref is populated / ready to capture
-    const timer = setTimeout(async () => {
-      if (!active) return;
-
-      const stream = screenStream || videoPlayerRef.current?.captureStream();
-      if (stream) {
-        console.log('Successfully captured stream for P2P broadcast...');
-        try {
-          await rtcRef.current?.startBroadcast(stream);
-        } catch (err) {
-          console.error('Failed to start WebRTC broadcast:', err);
+    const startBroadcastWhenReady = () => {
+      let attempts = 0;
+      checkInterval = setInterval(async () => {
+        if (!active) {
+          clearInterval(checkInterval);
+          return;
         }
-      } else {
-        console.warn('Could not capture stream for broadcast. Retrying in 2 seconds...');
-        const retryTimer = setTimeout(async () => {
-          if (!active) return;
-          const retryStream = screenStream || videoPlayerRef.current?.captureStream();
-          if (retryStream) {
-            try {
-              await rtcRef.current?.startBroadcast(retryStream);
-            } catch (err) {
-              console.error('Failed to start WebRTC broadcast on retry:', err);
-            }
+
+        attempts++;
+        const stream = screenStream || videoPlayerRef.current?.captureStream();
+        const hasTracks = stream && stream.getTracks().length > 0;
+
+        if (hasTracks) {
+          console.log(`Stream captured successfully with ${stream!.getTracks().length} tracks on attempt ${attempts}. Starting WebRTC broadcast...`);
+          clearInterval(checkInterval);
+          try {
+            await rtcRef.current?.startBroadcast(stream!);
+          } catch (err) {
+            console.error('Failed to start WebRTC broadcast:', err);
           }
-        }, 2000);
-        return () => clearTimeout(retryTimer);
-      }
-    }, 1000);
+        } else if (attempts > 15) {
+          console.error('Failed to capture active tracks from video stream after 15 attempts.');
+          clearInterval(checkInterval);
+        }
+      }, 1000);
+    };
+
+    startBroadcastWhenReady();
 
     return () => {
       active = false;
-      clearTimeout(timer);
+      if (checkInterval) clearInterval(checkInterval);
     };
   }, [isOwner, videoMode, localFile, screenStream]);
 
-  // ─── Local Webcam Capture ──────────────────────────────────────────────────
+  // ─── WebRTC Mesh Setup ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user || !code) return;
+
+    const mesh = new WebcamMeshService(code, user.uid, (peerUid, stream) => {
+      setPeerStreams((prev) => {
+        const next = { ...prev };
+        if (stream) {
+          next[peerUid] = stream;
+        } else {
+          delete next[peerUid];
+        }
+        return next;
+      });
+    });
+    webcamMeshRef.current = mesh;
+
+    return () => {
+      mesh.cleanup();
+      webcamMeshRef.current = null;
+    };
+  }, [user, code]);
+
+  useEffect(() => {
+    webcamMeshRef.current?.updateMembers(members);
+  }, [members]);
+
+  // ─── Local Media (Camera & Mic) Capture ────────────────────────────────────
   useEffect(() => {
     let activeStream: MediaStream | null = null;
 
-    const startCamera = async () => {
-      if (isCamOn) {
+    const startMedia = async () => {
+      if (isCamOn || isMicOn) {
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: 300, height: 300, facingMode: 'user' },
-            audio: false,
-          });
-          setCameraStream(stream);
+          const constraints = {
+            video: isCamOn ? { width: 300, height: 300, facingMode: 'user' } : false,
+            audio: isMicOn,
+          };
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          setLocalMediaStream(stream);
           activeStream = stream;
+          syncRef.current?.updateMemberStatus({ isCamOn, isMicOn });
         } catch (err) {
-          console.error('Failed to access camera:', err);
-          setIsCamOn(false);
+          console.error('Failed to access media devices:', err);
+          if (isCamOn) setIsCamOn(false);
+          if (isMicOn) setIsMicOn(false);
+          syncRef.current?.updateMemberStatus({ isCamOn: false, isMicOn: false });
         }
       } else {
-        if (cameraStream) {
-          cameraStream.getTracks().forEach((t) => t.stop());
-          setCameraStream(null);
+        if (localMediaStream) {
+          localMediaStream.getTracks().forEach((t) => t.stop());
+          setLocalMediaStream(null);
         }
+        syncRef.current?.updateMemberStatus({ isCamOn: false, isMicOn: false });
       }
     };
 
-    startCamera();
+    startMedia();
 
     return () => {
       if (activeStream) {
         activeStream.getTracks().forEach((t) => t.stop());
       }
     };
-  }, [isCamOn]);
+  }, [isCamOn, isMicOn]);
+
+  useEffect(() => {
+    webcamMeshRef.current?.updateLocalStream(localMediaStream);
+  }, [localMediaStream]);
 
   // ─── Screen share handlers ────────────────────────────────────────────────
   const handleStartScreenShare = useCallback(async () => {
@@ -711,7 +762,7 @@ export default function RoomPage() {
 
           {/* Members count */}
           <button
-            onClick={() => { setSidebarTab('members'); setShowSidebar(true); }}
+            onClick={() => { setChatMode('sidebar'); setSidebarTab('members'); setShowSidebar(true); }}
             className="flex items-center gap-1.5 px-2.5 py-1.5 glass border border-white/10
                        rounded-xl hover:border-white/20 transition-all text-xs text-white/60 font-medium"
           >
@@ -793,8 +844,8 @@ export default function RoomPage() {
             </motion.div>
           )}
 
-          {/* Draggable Spherical Webcam Preview */}
-          {isCamOn && cameraStream && (
+          {/* Draggable Spherical Webcam Preview for Local User */}
+          {(isCamOn || isMicOn) && localMediaStream && (
             <motion.div
               drag
               dragConstraints={videoAreaRef}
@@ -807,16 +858,115 @@ export default function RoomPage() {
                 backdropFilter: 'blur(4px)'
               }}
             >
-              <video
-                ref={(el) => {
-                  if (el) el.srcObject = cameraStream;
-                }}
-                autoPlay
-                playsInline
-                muted
-                className="w-full h-full object-cover rounded-full transform -scale-x-100"
-              />
+              {isCamOn ? (
+                <video
+                  ref={(el) => {
+                    if (el) el.srcObject = localMediaStream;
+                  }}
+                  autoPlay
+                  playsInline
+                  muted
+                  className="w-full h-full object-cover rounded-full transform -scale-x-100"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-center p-2 h-full w-full">
+                  <div className="w-12 h-12 rounded-full bg-cyan-500/20 border border-cyan-400 flex items-center justify-center text-cyan-300 font-bold text-lg animate-pulse">
+                    {(displayName || 'U').charAt(0).toUpperCase()}
+                  </div>
+                  <span className="text-[10px] text-cyan-300 font-semibold mt-1">Talking</span>
+                </div>
+              )}
+              <span className="absolute bottom-1 bg-black/60 px-1.5 py-0.5 rounded text-[8px] text-cyan-300 font-bold whitespace-nowrap">You</span>
             </motion.div>
+          )}
+
+          {/* Draggable Spherical Webcam Preview for Peers */}
+          {Object.entries(peerStreams).map(([peerUid, stream]) => {
+            const member = members[peerUid];
+            const peerCamOn = member?.isCamOn ?? false;
+            
+            const hash = peerUid.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            const initialLeft = 32 + (hash % 4) * 80;
+            const initialTop = 150 + (hash % 3) * 80;
+
+            return (
+              <motion.div
+                key={peerUid}
+                drag
+                dragConstraints={videoAreaRef}
+                dragElastic={0.1}
+                dragMomentum={false}
+                initial={{ left: initialLeft, top: initialTop }}
+                className="absolute z-40 w-28 h-28 md:w-32 md:h-32 rounded-full overflow-hidden border-[3px] border-purple-500 shadow-2xl cursor-grab active:cursor-grabbing flex items-center justify-center bg-black/20"
+                style={{
+                  boxShadow: '0 0 20px rgba(139, 92, 246, 0.45), inset 0 0 15px rgba(255, 255, 255, 0.1)',
+                  backdropFilter: 'blur(4px)'
+                }}
+              >
+                {peerCamOn ? (
+                  <video
+                    ref={(el) => {
+                      if (el && el.srcObject !== stream) el.srcObject = stream;
+                    }}
+                    autoPlay
+                    playsInline
+                    className="w-full h-full object-cover rounded-full"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center text-center p-2 h-full w-full">
+                    <div className="w-12 h-12 rounded-full bg-purple-500/20 border border-purple-400 flex items-center justify-center text-purple-300 font-bold text-lg animate-pulse">
+                      {(member?.name || 'F').charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-[10px] text-purple-300 font-semibold mt-1">Talking</span>
+                  </div>
+                )}
+                {!peerCamOn && (
+                  <audio
+                    ref={(el) => {
+                      if (el && el.srcObject !== stream) el.srcObject = stream;
+                    }}
+                    autoPlay
+                  />
+                )}
+                <span className="absolute bottom-1 bg-black/60 px-1.5 py-0.5 rounded text-[8px] text-purple-300 font-bold whitespace-nowrap max-w-[80%] truncate">
+                  {member?.name || 'Friend'}
+                </span>
+              </motion.div>
+            );
+          })}
+
+          {/* Floating Popup Chat */}
+          {chatMode === 'popup' && (
+            <div className="absolute bottom-24 right-4 z-40 w-72 flex flex-col gap-2">
+              <div className="flex flex-col gap-2 pointer-events-none items-end">
+                {messages.slice(-2).map(msg => (
+                  <div key={msg.id} className="bg-black/60 backdrop-blur-md border border-white/10 text-white text-sm px-3 py-2 rounded-xl shadow-lg max-w-full break-words">
+                    <span className="text-white/40 text-[10px] block mb-0.5">{msg.sender === user?.uid ? 'You' : msg.sender}</span>
+                    {msg.text}
+                  </div>
+                ))}
+              </div>
+              <div className="bg-black/80 backdrop-blur-xl border border-white/20 rounded-xl p-2 shadow-2xl flex items-center gap-2 pointer-events-auto">
+                <button
+                  onClick={() => { setChatMode('sidebar'); setShowSidebar(true); }}
+                  className="p-1.5 rounded-lg text-white/50 hover:bg-white/10 hover:text-white transition-colors"
+                  title="Expand to Sidebar"
+                >
+                  <Maximize2 size={16} />
+                </button>
+                <input
+                  type="text"
+                  placeholder="Type a message..."
+                  className="flex-1 bg-transparent text-white text-sm outline-none placeholder-white/40 min-w-0"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && e.currentTarget.value.trim()) {
+                      sendMessage(e.currentTarget.value.trim());
+                      e.currentTarget.value = '';
+                    }
+                  }}
+                />
+              </div>
+            </div>
           )}
         </div>
 
@@ -868,6 +1018,10 @@ export default function RoomPage() {
                         onSend={sendMessage}
                         currentUserId={user?.uid ?? ''}
                         currentUserName={displayName || 'Guest'}
+                        onMinimize={() => {
+                          setChatMode('popup');
+                          setShowSidebar(false);
+                        }}
                       />
                     </motion.div>
                   )}
@@ -999,7 +1153,7 @@ export default function RoomPage() {
             {['😂', '❤️', '🔥', '👏', '😮'].map(emoji => (
               <button
                 key={emoji}
-                onClick={() => fireReaction(emoji)}
+                onClick={() => syncRef.current?.sendReaction(emoji, displayName || 'Guest')}
                 className="w-9 h-9 flex items-center justify-center rounded-2xl glass border border-white/10
                            text-lg hover:bg-white/10 hover:border-white/20 hover:scale-110
                            active:scale-95 transition-all duration-150"

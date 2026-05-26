@@ -16,7 +16,10 @@ interface ChatPanelProps {
   onSend: (text: string) => void;
   currentUserId: string;
   currentUserName: string;
+  onMinimize?: () => void;
 }
+
+import { ChevronDown } from 'lucide-react';
 
 const QUICK_EMOJIS = ['😂', '❤️', '😮', '👏', '🔥', '😍', '😡', '💀'];
 
@@ -144,17 +147,28 @@ export default function ChatPanel({
           </svg>
           <span className="text-white font-semibold text-sm tracking-wide">Chat</span>
         </div>
-        {unreadCount > 0 && (
-          <button
-            onClick={scrollToBottom}
-            className="flex items-center gap-1 bg-blue-500 hover:bg-blue-400 text-white text-xs font-bold px-2 py-0.5 rounded-full transition-colors"
-          >
-            <span>{unreadCount}</span>
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {unreadCount > 0 && (
+            <button
+              onClick={scrollToBottom}
+              className="flex items-center gap-1 bg-blue-500 hover:bg-blue-400 text-white text-xs font-bold px-2 py-0.5 rounded-full transition-colors"
+            >
+              <span>{unreadCount}</span>
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+          )}
+          {onMinimize && (
+            <button
+              onClick={onMinimize}
+              className="text-white/50 hover:text-white transition-colors p-1 rounded-md hover:bg-white/10 ml-1"
+              title="Minimize to Popup"
+            >
+              <ChevronDown size={16} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Messages */}
