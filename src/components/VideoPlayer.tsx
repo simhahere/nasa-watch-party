@@ -336,6 +336,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
   const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastExternalStateRef = useRef<ExternalState | null>(null);
   const isSyncingRef = useRef(false);
+  const driftCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── Player state ──
   const [isPlaying, setIsPlaying] = useState(false);
@@ -575,6 +576,24 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
     };
 
     applySync();
+
+    // Start drift correction interval
+    if (driftCheckRef.current) clearInterval(driftCheckRef.current);
+    driftCheckRef.current = setInterval(() => {
+      const v = videoRef.current;
+      if (!v || !externalState) return;
+      const drift = Math.abs(v.currentTime - externalState.position);
+      if (drift > 3) {
+        v.currentTime = externalState.position;
+      }
+    }, 5000);
+
+    return () => {
+      if (driftCheckRef.current) {
+        clearInterval(driftCheckRef.current);
+        driftCheckRef.current = null;
+      }
+    };
   }, [externalState, isOwner, watchMode, mode]);
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -864,8 +883,23 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
 
       {/* ── Sync badge ── */}
       {watchMode === 'synced' && (
-        <div className="absolute top-3 right-3 z-20 pointer-events-none">
+        <div className="absolute top-3 right-3 z-20 pointer-events-none flex flex-col items-end gap-2">
           <SyncBadge synced={isSynced} syncing={isSyncing} watchMode={watchMode} isOwner={isOwner} />
+          {/* Quality badge for stream URLs */}
+          {streamUrl && (
+            <div className="flex items-center gap-1 bg-black/60 border border-white/10 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] font-bold text-white/70">
+              {(videoRef.current?.videoHeight ?? 0) >= 720 ? '🔵 HD' : '⚪ SD'}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Quality badge (non-synced, stream URL) ── */}
+      {watchMode !== 'synced' && streamUrl && (
+        <div className="absolute top-3 right-3 z-20 pointer-events-none">
+          <div className="flex items-center gap-1 bg-black/60 border border-white/10 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] font-bold text-white/70">
+            {(videoRef.current?.videoHeight ?? 0) >= 720 ? '🔵 HD' : '⚪ SD'}
+          </div>
         </div>
       )}
 

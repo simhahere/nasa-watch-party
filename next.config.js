@@ -2,7 +2,11 @@
 const nextConfig = {
   images: {
     unoptimized: true,
-    domains: ['lh3.googleusercontent.com', 'firebasestorage.googleapis.com'],
+    domains: [
+      'lh3.googleusercontent.com',
+      'firebasestorage.googleapis.com',
+      'res.cloudinary.com',
+    ],
   },
   typescript: {
     // Allow production builds to successfully complete even if type errors exist

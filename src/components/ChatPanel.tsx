@@ -10,6 +10,7 @@ interface ChatMessage {
   senderPhoto: string;
   senderId?: string;
   timestamp: number;
+  type?: 'chat' | 'system';
 }
 
 interface ChatPanelProps {
@@ -90,7 +91,14 @@ export default function ChatPanel({
       }
     }
     prevMessageCountRef.current = messages.length;
-  }, [messages, isAtBottom]);
+  }, [messages.length, isAtBottom]);
+
+  // Ensure scroll to bottom whenever length changes and we are at bottom
+  useEffect(() => {
+    if (isAtBottom) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length]);
 
   const handleScroll = () => {
     const container = messagesContainerRef.current;
@@ -193,12 +201,28 @@ export default function ChatPanel({
           </div>
         )}
 
-        {messages.map((msg, index) => {
-          const isOwn = msg.senderId ? msg.senderId === currentUserId : msg.sender === currentUserId;
-          const isReactionMsg = isReaction(msg.text);
-          const isNewMsg = index >= lastSeenCount - 1;
+        {(() => {
+          const renderedIds = new Set<string>();
+          return messages.map((msg, index) => {
+            if (renderedIds.has(msg.id)) return null;
+            renderedIds.add(msg.id);
 
-          if (isReactionMsg) {
+            const isOwn = msg.senderId ? msg.senderId === currentUserId : msg.sender === currentUserId;
+            const isReactionMsg = isReaction(msg.text);
+            const isNewMsg = index >= lastSeenCount - 1;
+
+            // System message
+            if (msg.type === 'system') {
+              return (
+                <div key={msg.id} className="flex justify-center items-center py-1">
+                  <span className="text-white/35 text-[11px] italic bg-white/5 rounded-full px-3 py-0.5">
+                    {msg.text}
+                  </span>
+                </div>
+              );
+            }
+
+            if (isReactionMsg) {
             return (
               <div
                 key={msg.id}
@@ -267,7 +291,8 @@ export default function ChatPanel({
               </div>
             </div>
           );
-        })}
+          });
+        })()}
         <div ref={messagesEndRef} />
       </div>
 

@@ -3,29 +3,29 @@
     "rooms": {
       "$roomCode": {
         ".read": true,
-        ".write": "auth != null",
+        ".write": true,
         "members": {
           "$uid": {
-            ".write": "$uid === auth.uid"
+            ".write": true
           }
         },
         "messages": {
-          ".write": "auth != null"
+          ".write": true
         },
         "playback": {
-          ".write": "auth != null"
+          ".write": true
         },
         "streamUrl": {
-          ".write": "auth != null"
+          ".write": true
         },
         "embedUrl": {
-          ".write": "auth != null"
+          ".write": true
         },
         "watchMode": {
-          ".write": "auth != null"
+          ".write": true
         },
         "streamQueue": {
-          ".write": "auth != null"
+          ".write": true
         }
       }
     }

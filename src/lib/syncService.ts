@@ -42,6 +42,13 @@ export type RoomMember = {
   isMicOn?: boolean;
 };
 
+export type VideoSource = {
+  url: string;       // CDN or stream URL
+  title: string;     // Display title
+  duration?: number; // Duration in seconds
+  type: 'cloudinary' | 'url' | 'embed';
+};
+
 // ─── SyncService ──────────────────────────────────────────────────────────────
 
 export class SyncService {
@@ -82,12 +89,14 @@ export class SyncService {
 
   /**
    * Publish playback state to Firebase (only the room owner should call this).
+   * Includes serverTime alongside updatedAt for drift correction on receivers.
    */
   async publishPlayback(state: Omit<PlaybackState, 'updatedAt'>): Promise<void> {
     const playbackRef = this.roomRef('playback');
     await set(playbackRef, {
       ...state,
       updatedAt: Date.now(),
+      serverTime: Date.now(),
     });
   }
 
@@ -153,21 +162,56 @@ export class SyncService {
     await set(this.roomRef('embedUrl'), url);
   }
 
+  // ── Video Source ──────────────────────────────────────────────────────────────
+
+  /**
+   * Set a unified video source for the room.
+   * - Writes to rooms/{code}/videoSource
+   * - Also calls setStreamUrl if type is 'cloudinary' or 'url'
+   * - Also calls setEmbedUrl if type is 'embed'
+   */
+  async setVideoSource(source: VideoSource): Promise<void> {
+    await set(this.roomRef('videoSource'), source);
+
+    if (source.type === 'cloudinary' || source.type === 'url') {
+      await this.setStreamUrl(source.url);
+    } else if (source.type === 'embed') {
+      await this.setEmbedUrl(source.url);
+    }
+  }
+
+  /**
+   * Subscribe to video source changes.
+   * Returns an unsubscribe function.
+   */
+  onVideoSource(callback: (source: VideoSource | null) => void): () => void {
+    const videoSourceRef = this.roomRef('videoSource');
+
+    const handler = onValue(videoSourceRef, (snapshot) => {
+      callback(snapshot.exists() ? (snapshot.val() as VideoSource) : null);
+    });
+
+    return this.addListener('videoSource', () => off(videoSourceRef, 'value', handler));
+  }
+
   // ── Clear Video ───────────────────────────────────────────────────────────────
 
   /**
-   * Remove all video sources (streamUrl, embedUrl, playback) from the room.
+   * Remove all video sources (streamUrl, embedUrl, videoSource, playback) from the room.
+   * Sets playback to idle state.
    */
   async clearVideo(): Promise<void> {
     await Promise.all([
       remove(this.roomRef('streamUrl')),
       remove(this.roomRef('embedUrl')),
+      remove(this.roomRef('videoSource')),
       set(this.roomRef('playback'), {
         status: 'idle' as const,
         position: 0,
         speed: 1,
         ownerId: this.userId,
         updatedAt: Date.now(),
+        serverTime: Date.now(),
       }),
     ]);
   }
@@ -206,7 +250,7 @@ export class SyncService {
    * Mark this user as present in the room.
    * Sets up onDisconnect so Firebase automatically marks them offline.
    */
-  async joinRoom(name: string, photoURL: string): Promise<void> {
+  async joinRoom(name: string, photoURL: string, role?: 'owner' | 'member'): Promise<void> {
     const memberRef = this.roomRef(`members/${this.userId}`);
 
     const memberData = {
@@ -215,6 +259,7 @@ export class SyncService {
       photoURL,
       online: true,
       lastSeen: serverTimestamp(),
+      role: role || 'member',
     };
 
     // What to write on disconnect
@@ -224,6 +269,7 @@ export class SyncService {
       photoURL,
       online: false,
       lastSeen: serverTimestamp(),
+      role: role || 'member',
     };
 
     await set(memberRef, memberData);

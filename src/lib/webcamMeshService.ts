@@ -7,9 +7,13 @@ const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
+    // Free TURN via Open Relay (no auth needed, limited bandwidth)
+    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 export class WebcamMeshService {
@@ -33,9 +37,24 @@ export class WebcamMeshService {
   // Update our local webcam/audio stream
   updateLocalStream(stream: MediaStream | null) {
     this.localStream = stream;
-    // Recreate active connections with the new stream
-    Array.from(this.peers.keys()).forEach((peerUid) => {
-      this.reconnectPeer(peerUid);
+    // Try to replace tracks on existing connections first
+    this.peers.forEach((pc, peerUid) => {
+      const senders = pc.getSenders();
+      if (stream && senders.length > 0) {
+        stream.getTracks().forEach(track => {
+          const sender = senders.find(s => s.track?.kind === track.kind);
+          if (sender) {
+            sender.replaceTrack(track).catch(err =>
+              console.warn('[WebcamMesh] replaceTrack failed:', err)
+            );
+          } else {
+            pc.addTrack(track, stream);
+          }
+        });
+      } else {
+        // No senders yet or stream removed, reconnect
+        this.reconnectPeer(peerUid);
+      }
     });
   }
 
@@ -172,8 +191,13 @@ export class WebcamMeshService {
 
     pc.onconnectionstatechange = () => {
       console.log(`[WebcamMesh] Connection state with ${peerUid}:`, pc.connectionState);
-      if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
-        // We could reconnect here, but presence sync will handle clean up
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        console.warn(`[WebcamMesh] Connection ${pc.connectionState} with ${peerUid}, reconnecting...`);
+        setTimeout(() => {
+          if (this.peers.has(peerUid)) {  // still should be connected
+            this.reconnectPeer(peerUid);
+          }
+        }, 3000);
       }
     };
   }

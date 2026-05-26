@@ -2,6 +2,7 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import CloudinaryUpload from './CloudinaryUpload';
 
 interface SelectVideoModalProps {
   isOpen: boolean;
@@ -13,7 +14,7 @@ interface SelectVideoModalProps {
   onStartScreenShare: () => void;
 }
 
-type Tab = 'url' | 'embed' | 'file';
+type Tab = 'url' | 'upload' | 'embed' | 'screen';
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -109,10 +110,10 @@ export default function SelectVideoModal({
     if (e.target === e.currentTarget) onClose();
   };
 
-  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  const allTabs: { id: Tab; label: string; icon: React.ReactNode; ownerOnly?: boolean }[] = [
     {
       id: 'url',
-      label: 'Direct URL',
+      label: 'URL',
       icon: (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -120,8 +121,17 @@ export default function SelectVideoModal({
       ),
     },
     {
+      id: 'upload',
+      label: 'Upload',
+      icon: (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+        </svg>
+      ),
+    },
+    {
       id: 'embed',
-      label: 'OTT & Sites',
+      label: 'Embed',
       icon: (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
@@ -129,15 +139,18 @@ export default function SelectVideoModal({
       ),
     },
     {
-      id: 'file',
-      label: 'Local File',
+      id: 'screen',
+      label: 'Screen Share',
+      ownerOnly: true,
       icon: (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         </svg>
       ),
     },
   ];
+
+  const tabs = allTabs.filter((t) => !t.ownerOnly || isOwner);
 
   return (
     <AnimatePresence>
@@ -428,95 +441,66 @@ export default function SelectVideoModal({
                   </motion.div>
                 )}
 
-                {/* === LOCAL FILE TAB === */}
-                {activeTab === 'file' && (
+                {/* === UPLOAD TAB === */}
+                {activeTab === 'upload' && (
                   <motion.div
-                    key="file"
+                    key="upload"
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
                     transition={{ duration: 0.15 }}
                     className="space-y-4"
                   >
-                    {/* Drop Zone */}
-                    <div
-                      onDrop={handleDrop}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`relative flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-xl py-8 px-4 cursor-pointer transition-all ${
-                        isDragging
-                          ? 'border-blue-400/70 bg-blue-500/10'
-                          : selectedFile
-                          ? 'border-green-500/50 bg-green-500/5'
-                          : 'border-white/20 bg-white/3 hover:border-white/30 hover:bg-white/5'
-                      }`}
-                    >
-                      {selectedFile ? (
-                        <>
-                          <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-                            <svg className="w-5 h-5 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-white text-sm font-medium truncate max-w-[260px]">
-                              {selectedFile.name}
-                            </p>
-                            <p className="text-white/40 text-xs mt-0.5">
-                              {formatFileSize(selectedFile.size)}
-                            </p>
-                          </div>
-                          <p className="text-white/30 text-xs">Click to change file</p>
-                        </>
-                      ) : (
-                        <>
-                          <div className="w-12 h-12 rounded-xl bg-white/5 flex items-center justify-center">
-                            <svg
-                              className={`w-6 h-6 transition-colors ${isDragging ? 'text-blue-400' : 'text-white/30'}`}
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                            </svg>
-                          </div>
-                          <div className="text-center">
-                            <p className={`text-sm font-medium transition-colors ${isDragging ? 'text-blue-400' : 'text-white/60'}`}>
-                              {isDragging ? 'Drop it here!' : 'Drag & drop your video here'}
-                            </p>
-                            <p className="text-white/30 text-xs mt-1">or click to browse</p>
-                          </div>
-                          <p className="text-white/20 text-[11px]">Supports MP4, WebM, MOV, MKV and more</p>
-                        </>
-                      )}
+                    <CloudinaryUpload
+                      onSuccess={(url, _title, _duration) => {
+                        onSelectUrl(url);
+                        onClose();
+                      }}
+                    />
+                  </motion.div>
+                )}
 
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="video/*"
-                        onChange={handleFileChange}
-                        className="hidden"
-                      />
+                {/* === SCREEN SHARE TAB === */}
+                {activeTab === 'screen' && isOwner && (
+                  <motion.div
+                    key="screen"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    transition={{ duration: 0.15 }}
+                    className="space-y-4"
+                  >
+                    <div className="flex flex-col items-center gap-4 py-4">
+                      <div className="w-16 h-16 rounded-2xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
+                        <svg className="w-8 h-8 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <div className="text-center">
+                        <h3 className="text-white font-semibold text-sm mb-1">Share Your Screen</h3>
+                        <p className="text-white/50 text-xs leading-relaxed max-w-xs">
+                          Broadcast your screen, a browser tab, or any app window live to all party members in real time.
+                        </p>
+                      </div>
+                      <div className="w-full bg-purple-950/20 border border-purple-500/20 rounded-xl p-3 space-y-1">
+                        <span className="block text-[10px] text-purple-300 font-bold uppercase tracking-wider">Great for:</span>
+                        <ul className="text-white/50 text-[11px] space-y-0.5 list-disc list-inside">
+                          <li>Netflix, JioCinema, Hotstar, Prime Video</li>
+                          <li>Any site that blocks embedding</li>
+                          <li>Presentations or anything on your screen</li>
+                        </ul>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onStartScreenShare?.();
+                          onClose();
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-sm font-bold transition-all shadow-lg shadow-purple-900/30 active:scale-[0.98] cursor-pointer"
+                      >
+                        🖥️ Start Live Screen Share
+                      </button>
                     </div>
-
-                    {/* Note */}
-                    <div className="flex items-start gap-2 bg-emerald-950/20 border border-emerald-500/20 rounded-lg px-3 py-2">
-                      <svg className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span className="text-emerald-300/80 text-xs leading-relaxed">
-                        Local files are streamed directly to all room members in high-definition via secure WebRTC connection!
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={handlePlayFile}
-                      disabled={!selectedFile}
-                      className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-white/10 disabled:to-white/10 disabled:cursor-not-allowed text-white font-semibold text-sm py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-900/30 active:scale-[0.98]"
-                    >
-                      Stream File for Everyone 🎬
-                    </button>
                   </motion.div>
                 )}
               </AnimatePresence>
