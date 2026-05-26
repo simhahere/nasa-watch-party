@@ -528,6 +528,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
 
   useEffect(() => {
     if (isOwner || watchMode !== 'synced' || !externalState) return;
+    if (p2pStream || screenStream) return; // Bypass sync for live streams
 
     const video = videoRef.current;
     if (!video || mode !== 'video') return;
@@ -855,9 +856,9 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
 
       {/* ── Local file badge ── */}
       {localFile && (
-        <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 bg-orange-500/20 border border-orange-500/30 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs text-orange-300 pointer-events-none">
+        <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 bg-emerald-500/20 border border-emerald-500/30 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs text-emerald-300 pointer-events-none animate-pulse">
           <Film size={12} />
-          <span>Local File — Only visible on your device</span>
+          <span>Local File — Broadcasting Live 🚀</span>
         </div>
       )}
 

@@ -44,7 +44,7 @@ export class WebcamMeshService {
     Object.entries(members).forEach(([peerUid, member]) => {
       if (peerUid === this.userId) return;
 
-      const shouldConnect = member.online && (member.isCamOn || member.isMicOn);
+      const shouldConnect = member.online;
       const hasConnection = this.peers.has(peerUid);
 
       if (shouldConnect && !hasConnection) {

@@ -232,6 +232,8 @@ export default function RoomPage() {
   const [isCopied, setIsCopied] = useState(false);
   const [showQueue, setShowQueue] = useState(false);
   const [localFileNotice, setLocalFileNotice] = useState(false);
+  const [popupMessages, setPopupMessages] = useState<Array<{id: string, sender: string, text: string}>>([]);
+  const prevMessagesLenRef = useRef(0);
 
   const syncRef = useRef<SyncService | null>(null);
   const videoAreaRef = useRef<HTMLDivElement>(null);
@@ -539,6 +541,32 @@ export default function RoomPage() {
     }
   }, [isOwner, watchMode, user]);
 
+  // ─── Vanishing popup chat notifications ───────────────────────────────────
+
+  useEffect(() => {
+    const currentLen = (messages || []).length;
+    const prevLen = prevMessagesLenRef.current;
+    prevMessagesLenRef.current = currentLen;
+
+    // Only fire when chat is hidden (popup mode or sidebar closed)
+    const chatHidden = chatMode === 'popup' || !showSidebar || sidebarTab !== 'chat';
+    if (!chatHidden) return;
+    if (currentLen <= prevLen) return;
+
+    const newMsgs = (messages || []).slice(prevLen);
+    newMsgs.forEach((msg: any) => {
+      const popupId = generateId();
+      const senderLabel = (msg.senderId ?? msg.sender) === user?.uid ? 'You' : String(msg.sender ?? 'Guest');
+      setPopupMessages(prev => {
+        const updated = [...prev, { id: popupId, sender: senderLabel, text: String(msg.text ?? '') }];
+        return updated.slice(-2); // Keep max 2 popups
+      });
+      setTimeout(() => {
+        setPopupMessages(prev => prev.filter(p => p.id !== popupId));
+      }, 4000);
+    });
+  }, [messages, chatMode, showSidebar, sidebarTab, user]);
+
   // ─── Floating reactions ───────────────────────────────────────────────────
 
   const fireReaction = useCallback((emoji: string) => {
@@ -770,82 +798,40 @@ export default function RoomPage() {
             <span>{memberCount}</span>
           </button>
 
-          {/* Settings */}
-          <button
-            className="w-8 h-8 glass border border-white/10 rounded-xl flex items-center justify-center
-                       hover:border-white/20 hover:text-white text-white/50 transition-all"
-            title="Settings"
-          >
-            <Settings size={14} />
-          </button>
-
-          {/* Leave */}
+          {/* Settings / Leave */}
           <button
             onClick={handleLeave}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-semibold
-                       bg-red-500/15 border border-red-500/30 text-red-400
-                       hover:bg-red-500/25 hover:border-red-500/50 transition-all"
+            className="w-8 h-8 glass border border-white/10 rounded-xl flex items-center justify-center
+                       hover:border-red-500/40 hover:text-red-400 text-white/50 transition-all"
+            title="Leave room"
           >
-            <LogOut size={12} />
-            <span className="hidden sm:block">Leave</span>
+            <LogOut size={14} />
           </button>
         </div>
       </header>
 
       {/* ════════════════════════════════════════════════════════════
-          MIDDLE: VIDEO + SIDEBAR
+          MAIN CONTENT AREA (video + sidebar)
       ════════════════════════════════════════════════════════════ */}
       <div className="flex flex-1 overflow-hidden relative">
 
         {/* ── Video area ── */}
-        <div ref={videoAreaRef} className="flex-1 min-w-0 flex flex-col items-center justify-center p-3 md:p-4 bg-black/30 relative">
-          {videoMode ? (
-            <div className="w-full h-full max-h-full relative rounded-2xl overflow-hidden">
-              <VideoPlayer
-                ref={videoPlayerRef}
-                streamUrl={streamUrl}
-                embedUrl={embedUrl}
-                localFile={localFile}
-                externalState={externalPlayback}
-                onPlaybackChange={handlePlaybackChange}
-                isOwner={isOwner}
-                watchMode={watchMode}
-                p2pStream={p2pStream}
-                screenStream={screenStream}
-              />
-            </div>
-          ) : (
-            /* Empty state */
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center gap-5 text-center p-8 max-w-sm"
-            >
-              <div className="w-24 h-24 rounded-3xl bg-gradient-to-br from-cyan-500/20 to-purple-600/20
-                              border border-white/10 flex items-center justify-center">
-                <Tv2 size={42} className="text-white/20" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-white/80 mb-1">No Video Selected</h3>
-                <p className="text-sm text-white/30 leading-relaxed">
-                  {isOwner
-                    ? 'Select a video to start the watch party for everyone.'
-                    : 'Waiting for the host to start the video…'}
-                </p>
-              </div>
-              {isOwner && (
-                <button
-                  onClick={() => setShowVideoModal(true)}
-                  className="btn-primary"
-                >
-                  <Tv2 size={16} /> Select Video
-                </button>
-              )}
-            </motion.div>
-          )}
+        <div ref={videoAreaRef} className="flex-1 relative overflow-hidden bg-black">
+
+          <VideoPlayer
+            streamUrl={p2pStream ? null : streamUrl}
+            embedUrl={embedUrl}
+            localFile={localFile}
+            p2pStream={p2pStream || screenStream}
+            isOwner={isOwner}
+            watchMode={watchMode}
+            onPlaybackChange={handlePlaybackChange}
+            externalState={externalPlayback}
+            ref={videoPlayerRef}
+          />
 
           {/* Draggable Spherical Webcam Preview for Local User */}
-          {(isCamOn || isMicOn) && localMediaStream && (
+          {user && (
             <motion.div
               drag
               dragConstraints={videoAreaRef}
@@ -858,7 +844,7 @@ export default function RoomPage() {
                 backdropFilter: 'blur(4px)'
               }}
             >
-              {isCamOn ? (
+              {isCamOn && localMediaStream ? (
                 <video
                   ref={(el) => {
                     if (el) el.srcObject = localMediaStream;
@@ -870,22 +856,27 @@ export default function RoomPage() {
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center text-center p-2 h-full w-full">
-                  <div className="w-12 h-12 rounded-full bg-cyan-500/20 border border-cyan-400 flex items-center justify-center text-cyan-300 font-bold text-lg animate-pulse">
+                  <div className={`w-12 h-12 rounded-full bg-cyan-500/20 border border-cyan-400 flex items-center justify-center text-cyan-300 font-bold text-lg ${isMicOn ? 'animate-pulse' : ''}`}>
                     {(displayName || 'U').charAt(0).toUpperCase()}
                   </div>
-                  <span className="text-[10px] text-cyan-300 font-semibold mt-1">Talking</span>
+                  <span className="text-[10px] text-cyan-300 font-semibold mt-1">
+                    {isMicOn ? 'Talking' : 'Camera Off'}
+                  </span>
                 </div>
               )}
               <span className="absolute bottom-1 bg-black/60 px-1.5 py-0.5 rounded text-[8px] text-cyan-300 font-bold whitespace-nowrap">You</span>
             </motion.div>
           )}
 
-          {/* Draggable Spherical Webcam Preview for Peers */}
-          {Object.entries(peerStreams || {}).map(([peerUid, stream]) => {
-            const member = members[peerUid];
+          {/* Draggable Spherical Webcam Preview for ALL Online Peers (keyed by members, not peerStreams) */}
+          {Object.entries(members || {}).map(([peerUid, member]) => {
+            if (peerUid === user?.uid || !member?.online) return null;
+
+            const stream = peerStreams[peerUid];
             const peerCamOn = member?.isCamOn ?? false;
-            
-            const hash = peerUid.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+            const peerMicOn = member?.isMicOn ?? false;
+
+            const hash = peerUid.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
             const initialLeft = 32 + (hash % 4) * 80;
             const initialTop = 150 + (hash % 3) * 80;
 
@@ -900,10 +891,11 @@ export default function RoomPage() {
                 className="absolute z-40 w-28 h-28 md:w-32 md:h-32 rounded-full overflow-hidden border-[3px] border-purple-500 shadow-2xl cursor-grab active:cursor-grabbing flex items-center justify-center bg-black/20"
                 style={{
                   boxShadow: '0 0 20px rgba(139, 92, 246, 0.45), inset 0 0 15px rgba(255, 255, 255, 0.1)',
-                  backdropFilter: 'blur(4px)'
+                  backdropFilter: 'blur(4px)',
+                  position: 'absolute',
                 }}
               >
-                {peerCamOn ? (
+                {peerCamOn && stream ? (
                   <video
                     ref={(el) => {
                       if (el && el.srcObject !== stream) el.srcObject = stream;
@@ -914,13 +906,16 @@ export default function RoomPage() {
                   />
                 ) : (
                   <div className="flex flex-col items-center justify-center text-center p-2 h-full w-full">
-                    <div className="w-12 h-12 rounded-full bg-purple-500/20 border border-purple-400 flex items-center justify-center text-purple-300 font-bold text-lg animate-pulse">
+                    <div className={`w-12 h-12 rounded-full bg-purple-500/20 border border-purple-400 flex items-center justify-center text-purple-300 font-bold text-lg ${peerMicOn ? 'animate-pulse' : ''}`}>
                       {(member?.name || 'F').charAt(0).toUpperCase()}
                     </div>
-                    <span className="text-[10px] text-purple-300 font-semibold mt-1">Talking</span>
+                    <span className="text-[10px] text-purple-300 font-semibold mt-1">
+                      {peerMicOn ? 'Talking' : 'Camera Off'}
+                    </span>
                   </div>
                 )}
-                {!peerCamOn && (
+                {/* Always play audio if stream is available */}
+                {stream && (
                   <audio
                     ref={(el) => {
                       if (el && el.srcObject !== stream) el.srcObject = stream;
@@ -935,22 +930,31 @@ export default function RoomPage() {
             );
           })}
 
-          {/* Floating Popup Chat */}
+          {/* Vanishing Popup Chat Notifications (when sidebar is closed / in popup mode) */}
+          <AnimatePresence>
+            {popupMessages.map(pm => (
+              <motion.div
+                key={pm.id}
+                initial={{ opacity: 0, x: 60, scale: 0.9 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: 60, scale: 0.85 }}
+                transition={{ type: 'spring', damping: 24, stiffness: 260 }}
+                className="absolute bottom-28 right-4 z-50 pointer-events-none"
+              >
+                <div className="bg-black/75 backdrop-blur-xl border border-white/15 text-white text-sm px-4 py-2.5 rounded-2xl shadow-2xl max-w-[260px] break-words">
+                  <span className="text-cyan-300 text-[10px] font-semibold block mb-0.5">{pm.sender}</span>
+                  {pm.text}
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+
+          {/* Floating Popup Chat Mini-bar (when in popup mode) */}
           {chatMode === 'popup' && (
-            <div className="absolute bottom-24 right-4 z-40 w-72 flex flex-col gap-2">
-              <div className="flex flex-col gap-2 pointer-events-none items-end">
-                {(messages || []).slice(-2).map(msg => (
-                  <div key={msg.id} className="bg-black/60 backdrop-blur-md border border-white/10 text-white text-sm px-3 py-2 rounded-xl shadow-lg max-w-full break-words">
-                    <span className="text-white/40 text-[10px] block mb-0.5">
-                      {msg.senderId ? (msg.senderId === user?.uid ? 'You' : String(msg.sender)) : (msg.sender === user?.uid ? 'You' : String(msg.sender))}
-                    </span>
-                    {msg.text}
-                  </div>
-                ))}
-              </div>
+            <div className="absolute bottom-4 right-4 z-40 w-72">
               <div className="bg-black/80 backdrop-blur-xl border border-white/20 rounded-xl p-2 shadow-2xl flex items-center gap-2 pointer-events-auto">
                 <button
-                  onClick={() => { setChatMode('sidebar'); setShowSidebar(true); }}
+                  onClick={() => { setChatMode('sidebar'); setShowSidebar(true); setSidebarTab('chat'); }}
                   className="p-1.5 rounded-lg text-white/50 hover:bg-white/10 hover:text-white transition-colors"
                   title="Expand to Sidebar"
                 >
@@ -967,6 +971,16 @@ export default function RoomPage() {
                     }
                   }}
                 />
+                <button
+                  onClick={() => {
+                    const inp = document.querySelector<HTMLInputElement>('.popup-chat-input');
+                    if (inp && inp.value.trim()) { sendMessage(inp.value.trim()); inp.value = ''; }
+                  }}
+                  className="p-1.5 rounded-lg bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 transition-colors"
+                  title="Send"
+                >
+                  <Send size={14} />
+                </button>
               </div>
             </div>
           )}
