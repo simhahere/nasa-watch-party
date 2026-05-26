@@ -20,6 +20,7 @@ import { useChat } from '@/hooks/useChat';
 import { WebRTCStreamService } from '@/lib/webrtcStreamService';
 import { WebcamMeshService } from '@/lib/webcamMeshService';
 
+
 // --- Types ---
 interface Reaction { id: string; emoji: string; x: number; }
 type SidebarTab = 'chat' | 'members' | 'room';
@@ -171,6 +172,7 @@ export default function RoomPage() {
   const videoPlayerRef = useRef<VideoPlayerRef | null>(null);
   const rtcRef = useRef<WebRTCStreamService | null>(null);
   const webcamMeshRef = useRef<WebcamMeshService | null>(null);
+  
   const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
   const [peerStreams, setPeerStreams] = useState<Record<string, MediaStream>>({});
 
@@ -279,12 +281,23 @@ export default function RoomPage() {
   useEffect(() => {
     if (!user || !code) return;
     const mesh = new WebcamMeshService(code, user.uid, (uid, stream) => {
-      setPeerStreams(prev => { const n = { ...prev }; if (stream) n[uid] = stream; else delete n[uid]; return n; });
+      setPeerStreams(prev => {
+        const n = { ...prev };
+        if (stream) n[uid] = stream;
+        else delete n[uid];
+        return n;
+      });
     });
     webcamMeshRef.current = mesh;
-    return () => { mesh.cleanup(); webcamMeshRef.current = null; };
+    return () => {
+      mesh.cleanup();
+      webcamMeshRef.current = null;
+    };
   }, [user, code]);
-  useEffect(() => { webcamMeshRef.current?.updateMembers(members); }, [members]);
+
+  useEffect(() => {
+    webcamMeshRef.current?.updateMembers(members);
+  }, [members]);
 
   // Local media
   useEffect(() => {
@@ -301,7 +314,10 @@ export default function RoomPage() {
     go();
     return () => { active?.getTracks().forEach(t => t.stop()); };
   }, [isCamOn, isMicOn]);
-  useEffect(() => { webcamMeshRef.current?.updateLocalStream(localMediaStream); }, [localMediaStream]);
+  
+  useEffect(() => {
+    webcamMeshRef.current?.updateLocalStream(localMediaStream);
+  }, [localMediaStream]);
 
   // Vanishing popup chat
   useEffect(() => {

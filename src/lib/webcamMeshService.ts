@@ -7,11 +7,8 @@ const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
     { urls: 'stun:stun.cloudflare.com:3478' },
-    // Free TURN via Open Relay (no auth needed, limited bandwidth)
-    { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-    { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
   ],
   iceCandidatePoolSize: 10,
 };
@@ -39,23 +36,29 @@ export class WebcamMeshService {
   updateLocalStream(stream: MediaStream | null) {
     this.localStream = stream;
     
-    // Check if we need to establish or break connections based on new stream state
     if (this.lastMembers) {
       this.updateMembers(this.lastMembers);
     }
 
-    // Also replace tracks on existing connections if stream is active
+    // Replace tracks on existing connections
     this.peers.forEach((pc, peerUid) => {
       const senders = pc.getSenders();
-      if (stream && senders.length > 0) {
+      if (stream) {
         stream.getTracks().forEach(track => {
           const sender = senders.find(s => s.track?.kind === track.kind);
           if (sender) {
             sender.replaceTrack(track).catch(err =>
-              console.warn('[WebcamMesh] replaceTrack failed:', err)
+              console.warn(`[WebcamMesh] replaceTrack failed for ${peerUid}:`, err)
             );
           } else {
             pc.addTrack(track, stream);
+          }
+        });
+      } else {
+        // If stream is disabled, remove local tracks from peer connection
+        senders.forEach(sender => {
+          if (sender.track) {
+            pc.removeTrack(sender);
           }
         });
       }
@@ -69,8 +72,8 @@ export class WebcamMeshService {
     Object.entries(this.lastMembers).forEach(([peerUid, member]) => {
       if (peerUid === this.userId) return;
 
-      // Only connect if the peer is online AND either we have local tracks or they have mic/cam enabled
-      const shouldConnect = member.online && (this.localStream !== null || member.isCamOn || member.isMicOn);
+      // Connect if peer is online
+      const shouldConnect = member.online;
       const hasConnection = this.peers.has(peerUid);
 
       if (shouldConnect && !hasConnection) {
@@ -80,18 +83,13 @@ export class WebcamMeshService {
       }
     });
 
-    // Cleanup peers that are no longer online or active
+    // Cleanup peers that are no longer online
     Array.from(this.peers.keys()).forEach((peerUid) => {
       const member = this.lastMembers[peerUid];
-      if (!member || !member.online || (this.localStream === null && !member.isCamOn && !member.isMicOn)) {
+      if (!member || !member.online) {
         this.disconnectPeer(peerUid);
       }
     });
-  }
-
-  private reconnectPeer(peerUid: string) {
-    this.disconnectPeer(peerUid);
-    this.connectPeer(peerUid);
   }
 
   private connectPeer(peerUid: string) {
@@ -110,7 +108,9 @@ export class WebcamMeshService {
     pc.ontrack = (e) => {
       console.log(`[WebcamMesh] Received track from peer ${peerUid}:`, e.track.kind);
       e.streams[0]?.getTracks().forEach((track) => {
-        remoteStream.addTrack(track);
+        if (!remoteStream.getTracks().find(t => t.id === track.id)) {
+          remoteStream.addTrack(track);
+        }
       });
       this.onStreamChange(peerUid, remoteStream);
     };
@@ -125,6 +125,16 @@ export class WebcamMeshService {
     const initiatorUid = isInitiator ? this.userId : peerUid;
     const receiverUid = isInitiator ? peerUid : this.userId;
     const signalPath = `rooms/${this.roomCode}/webcamSignals/${initiatorUid}/${receiverUid}`;
+
+    const queuedCandidates: any[] = [];
+    let isRemoteDescriptionSet = false;
+
+    const processQueuedCandidates = () => {
+      queuedCandidates.forEach(cand => {
+        pc.addIceCandidate(new RTCIceCandidate(cand)).catch(() => {});
+      });
+      queuedCandidates.length = 0;
+    };
 
     if (isInitiator) {
       // INITIATOR FLOW
@@ -149,6 +159,8 @@ export class WebcamMeshService {
         if (!snap.exists() || pc.signalingState === 'stable') return;
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(snap.val()));
+          isRemoteDescriptionSet = true;
+          processQueuedCandidates();
         } catch (err) {
           console.error('[WebcamMesh] Error setting remote description (answer):', err);
         }
@@ -159,7 +171,11 @@ export class WebcamMeshService {
       const recCandUnsub = onValue(recCandRef, (snap) => {
         snap.forEach((child) => {
           const candidateData = child.val();
-          pc.addIceCandidate(new RTCIceCandidate(candidateData)).catch(() => {});
+          if (isRemoteDescriptionSet) {
+            pc.addIceCandidate(new RTCIceCandidate(candidateData)).catch(() => {});
+          } else {
+            queuedCandidates.push(candidateData);
+          }
         });
       });
       this.unsubscribers.get(peerUid)?.push(() => off(recCandRef, 'value', recCandUnsub as any));
@@ -178,6 +194,9 @@ export class WebcamMeshService {
         try {
           const offer = snap.val();
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
+          isRemoteDescriptionSet = true;
+          processQueuedCandidates();
+          
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
           await set(ref(database, `${signalPath}/answer`), answer.toJSON());
@@ -191,7 +210,11 @@ export class WebcamMeshService {
       const initCandUnsub = onValue(initCandRef, (snap) => {
         snap.forEach((child) => {
           const candidateData = child.val();
-          pc.addIceCandidate(new RTCIceCandidate(candidateData)).catch(() => {});
+          if (isRemoteDescriptionSet) {
+            pc.addIceCandidate(new RTCIceCandidate(candidateData)).catch(() => {});
+          } else {
+            queuedCandidates.push(candidateData);
+          }
         });
       });
       this.unsubscribers.get(peerUid)?.push(() => off(initCandRef, 'value', initCandUnsub as any));
@@ -200,12 +223,13 @@ export class WebcamMeshService {
     pc.onconnectionstatechange = () => {
       console.log(`[WebcamMesh] Connection state with ${peerUid}:`, pc.connectionState);
       if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-        console.warn(`[WebcamMesh] Connection ${pc.connectionState} with ${peerUid}, reconnecting...`);
+        console.warn(`[WebcamMesh] Connection failed/disconnected with ${peerUid}, cleaning up/reconnecting...`);
+        this.disconnectPeer(peerUid);
         setTimeout(() => {
-          if (this.peers.has(peerUid)) {  // still should be connected
-            this.reconnectPeer(peerUid);
+          if (this.lastMembers[peerUid]?.online) {
+            this.connectPeer(peerUid);
           }
-        }, 3000);
+        }, 2000);
       }
     };
   }
@@ -227,9 +251,7 @@ export class WebcamMeshService {
 
     const isInitiator = this.userId < peerUid;
     if (isInitiator) {
-      const initiatorUid = this.userId;
-      const receiverUid = peerUid;
-      remove(ref(database, `rooms/${this.roomCode}/webcamSignals/${initiatorUid}/${receiverUid}`));
+      remove(ref(database, `rooms/${this.roomCode}/webcamSignals/${this.userId}/${peerUid}`));
     }
 
     this.onStreamChange(peerUid, null);
