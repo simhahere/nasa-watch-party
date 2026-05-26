@@ -66,6 +66,7 @@ export default function ChatPanel({
   onSend,
   currentUserId,
   currentUserName,
+  onMinimize,
 }: ChatPanelProps) {
   const [inputText, setInputText] = useState('');
   const [unreadCount, setUnreadCount] = useState(0);
