@@ -654,11 +654,11 @@ export default function RoomPage() {
             initial={{ y: -50, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: -50, opacity: 0 }}
-            className="fixed top-16 left-1/2 -translate-x-1/2 z-50 glass border border-yellow-400/30
-                       text-yellow-300 text-sm px-4 py-2 rounded-xl flex items-center gap-2"
+            className="fixed top-16 left-1/2 -translate-x-1/2 z-50 glass border border-emerald-500/30
+                       text-emerald-300 text-sm px-4 py-2 rounded-xl flex items-center gap-2"
           >
-            <span>⚠️</span>
-            <span>Local file loaded — sync not available for local files.</span>
+            <span>🚀</span>
+            <span>Local file loaded — Broadcasting live to everyone in the room!</span>
           </motion.div>
         )}
       </AnimatePresence>

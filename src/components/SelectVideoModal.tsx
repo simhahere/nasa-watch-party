@@ -501,12 +501,12 @@ export default function SelectVideoModal({
                     </div>
 
                     {/* Note */}
-                    <div className="flex items-start gap-2 bg-white/5 border border-white/8 rounded-lg px-3 py-2">
-                      <svg className="w-3.5 h-3.5 text-white/30 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div className="flex items-start gap-2 bg-emerald-950/20 border border-emerald-500/20 rounded-lg px-3 py-2">
+                      <svg className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span className="text-white/40 text-xs leading-relaxed">
-                        Local files only play on your device. Use URL or Embed for group watching.
+                      <span className="text-emerald-300/80 text-xs leading-relaxed">
+                        Local files are streamed directly to all room members in high-definition via secure WebRTC connection!
                       </span>
                     </div>
 
@@ -515,7 +515,7 @@ export default function SelectVideoModal({
                       disabled={!selectedFile}
                       className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-white/10 disabled:to-white/10 disabled:cursor-not-allowed text-white font-semibold text-sm py-2.5 rounded-xl transition-all shadow-lg shadow-emerald-900/30 active:scale-[0.98]"
                     >
-                      Play on My Device
+                      Stream File for Everyone 🎬
                     </button>
                   </motion.div>
                 )}
