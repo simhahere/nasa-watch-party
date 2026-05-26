@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import Image from 'next/image';
 
 interface Member {
   name: string;
@@ -24,7 +23,8 @@ interface MembersListProps {
 }
 
 function getInitials(name: string): string {
-  return name?.charAt(0)?.toUpperCase() ?? '?';
+  const safeName = typeof name === 'string' ? name : 'Guest';
+  return safeName.charAt(0).toUpperCase() || '?';
 }
 
 const AVATAR_COLORS = [
@@ -39,33 +39,33 @@ const AVATAR_COLORS = [
 ];
 
 function getAvatarColor(name: string): string {
-  const index = (name?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length;
+  const safeName = typeof name === 'string' ? name : 'Guest';
+  const index = (safeName.charCodeAt(0) || 0) % AVATAR_COLORS.length;
   return AVATAR_COLORS[index];
 }
 
 function MemberAvatar({ name, photoURL, size = 36 }: { name: string; photoURL: string; size?: number }) {
+  const safeName = typeof name === 'string' ? name : 'Guest';
   if (photoURL) {
     return (
       <div
         className="relative rounded-full overflow-hidden ring-1 ring-white/20 flex-shrink-0"
         style={{ width: size, height: size }}
       >
-        <Image
+        <img
           src={photoURL}
-          alt={name}
-          fill
-          className="object-cover"
-          unoptimized
+          alt={safeName}
+          className="w-full h-full object-cover"
         />
       </div>
     );
   }
   return (
     <div
-      className={`bg-gradient-to-br ${getAvatarColor(name)} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`}
+      className={`bg-gradient-to-br ${getAvatarColor(safeName)} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`}
       style={{ width: size, height: size, fontSize: size * 0.38 }}
     >
-      {getInitials(name)}
+      {getInitials(safeName)}
     </div>
   );
 }

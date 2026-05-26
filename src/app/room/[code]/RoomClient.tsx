@@ -240,7 +240,7 @@ export default function RoomPage() {
   const webcamMeshRef = useRef<WebcamMeshService | null>(null);
 
   // ── Derived ──
-  const memberCount = Object.keys(members).length;
+  const memberCount = Object.keys(members || {}).length;
   const shareMessage = `🎬 Join my NASA Watch Party!\n\nOpen nasa-25483.web.app and enter code: ${code}\n\nEveryone watches together in sync!`;
 
   const videoMode = localFile
@@ -881,7 +881,7 @@ export default function RoomPage() {
           )}
 
           {/* Draggable Spherical Webcam Preview for Peers */}
-          {Object.entries(peerStreams).map(([peerUid, stream]) => {
+          {Object.entries(peerStreams || {}).map(([peerUid, stream]) => {
             const member = members[peerUid];
             const peerCamOn = member?.isCamOn ?? false;
             
@@ -939,9 +939,11 @@ export default function RoomPage() {
           {chatMode === 'popup' && (
             <div className="absolute bottom-24 right-4 z-40 w-72 flex flex-col gap-2">
               <div className="flex flex-col gap-2 pointer-events-none items-end">
-                {messages.slice(-2).map(msg => (
+                {(messages || []).slice(-2).map(msg => (
                   <div key={msg.id} className="bg-black/60 backdrop-blur-md border border-white/10 text-white text-sm px-3 py-2 rounded-xl shadow-lg max-w-full break-words">
-                    <span className="text-white/40 text-[10px] block mb-0.5">{msg.sender === user?.uid ? 'You' : msg.sender}</span>
+                    <span className="text-white/40 text-[10px] block mb-0.5">
+                      {msg.senderId ? (msg.senderId === user?.uid ? 'You' : String(msg.sender)) : (msg.sender === user?.uid ? 'You' : String(msg.sender))}
+                    </span>
                     {msg.text}
                   </div>
                 ))}

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 import { ChevronDown } from 'lucide-react';
 
 interface ChatMessage {
@@ -9,6 +8,7 @@ interface ChatMessage {
   text: string;
   sender: string;
   senderPhoto: string;
+  senderId?: string;
   timestamp: number;
 }
 
@@ -34,10 +34,12 @@ function formatTimestamp(ts: number): string {
 }
 
 function getInitials(name: string): string {
-  return name?.charAt(0)?.toUpperCase() ?? '?';
+  const safeName = typeof name === 'string' ? name : 'Guest';
+  return safeName.charAt(0).toUpperCase() || '?';
 }
 
 function AvatarFallback({ name, size = 32 }: { name: string; size?: number }) {
+  const safeName = typeof name === 'string' ? name : 'Guest';
   const colors = [
     'from-purple-500 to-indigo-600',
     'from-blue-500 to-cyan-600',
@@ -46,7 +48,7 @@ function AvatarFallback({ name, size = 32 }: { name: string; size?: number }) {
     'from-orange-500 to-amber-600',
     'from-violet-500 to-purple-600',
   ];
-  const colorIndex = name.charCodeAt(0) % colors.length;
+  const colorIndex = (safeName.charCodeAt(0) || 0) % colors.length;
   const gradient = colors[colorIndex];
 
   return (
@@ -54,7 +56,7 @@ function AvatarFallback({ name, size = 32 }: { name: string; size?: number }) {
       className={`bg-gradient-to-br ${gradient} rounded-full flex items-center justify-center text-white font-bold flex-shrink-0`}
       style={{ width: size, height: size, fontSize: size * 0.4 }}
     >
-      {getInitials(name)}
+      {getInitials(safeName)}
     </div>
   );
 }
@@ -191,7 +193,7 @@ export default function ChatPanel({
         )}
 
         {messages.map((msg, index) => {
-          const isOwn = msg.sender === currentUserId;
+          const isOwn = msg.senderId ? msg.senderId === currentUserId : msg.sender === currentUserId;
           const isReactionMsg = isReaction(msg.text);
           const isNewMsg = index >= lastSeenCount - 1;
 
@@ -241,12 +243,10 @@ export default function ChatPanel({
               <div className="flex-shrink-0 mb-0.5">
                 {msg.senderPhoto ? (
                   <div className="relative w-7 h-7 rounded-full overflow-hidden ring-1 ring-white/20">
-                    <Image
+                    <img
                       src={msg.senderPhoto}
                       alt={msg.sender}
-                      fill
-                      className="object-cover"
-                      unoptimized
+                      className="w-full h-full object-cover"
                     />
                   </div>
                 ) : (
