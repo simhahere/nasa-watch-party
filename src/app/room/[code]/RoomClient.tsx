@@ -206,21 +206,44 @@ export default function RoomPage() {
     const u2 = svc.onStreamUrl((url) => setStreamUrl(url));
     const u3 = svc.onEmbedUrl((url) => setEmbedUrl(url));
     const u5 = svc.onMembers((m) => {
-      // Detect join/leave
+      // Detect join/leave and media toggles
       const prevM = prevMembersRef.current;
       Object.entries(m || {}).forEach(([uid, member]: [string, any]) => {
         if (uid === user.uid) return;
         const prev = prevM[uid];
+        const name = member?.name || prev?.name || 'Someone';
+        
         if (member?.online && (!prev || !prev.online)) {
           // User joined
           const nid = generateId();
-          setRoomNotifications(prev => [...prev, { id: nid, text: `${member.name || 'Someone'} joined the room`, type: 'join' as const }]);
+          setRoomNotifications(prev => [...prev, { id: nid, text: `${name} joined the room`, type: 'join' as const }]);
           setTimeout(() => setRoomNotifications(prev => prev.filter(n => n.id !== nid)), 4000);
         } else if (!member?.online && prev?.online) {
           // User left
           const nid = generateId();
-          setRoomNotifications(prev => [...prev, { id: nid, text: `${member.name || prev.name || 'Someone'} left the room`, type: 'leave' as const }]);
+          setRoomNotifications(prev => [...prev, { id: nid, text: `${name} left the room`, type: 'leave' as const }]);
           setTimeout(() => setRoomNotifications(prev => prev.filter(n => n.id !== nid)), 4000);
+        } else if (member?.online && prev?.online) {
+          // Media toggles
+          if (member.isCamOn && !prev.isCamOn) {
+            const nid = generateId();
+            setRoomNotifications(p => [...p, { id: nid, text: `${name} turned camera on`, type: 'join' as const }]);
+            setTimeout(() => setRoomNotifications(p => p.filter(n => n.id !== nid)), 4000);
+          } else if (!member.isCamOn && prev.isCamOn) {
+            const nid = generateId();
+            setRoomNotifications(p => [...p, { id: nid, text: `${name} turned camera off`, type: 'leave' as const }]);
+            setTimeout(() => setRoomNotifications(p => p.filter(n => n.id !== nid)), 4000);
+          }
+
+          if (member.isMicOn && !prev.isMicOn) {
+            const nid = generateId();
+            setRoomNotifications(p => [...p, { id: nid, text: `${name} unmuted`, type: 'join' as const }]);
+            setTimeout(() => setRoomNotifications(p => p.filter(n => n.id !== nid)), 4000);
+          } else if (!member.isMicOn && prev.isMicOn) {
+            const nid = generateId();
+            setRoomNotifications(p => [...p, { id: nid, text: `${name} muted`, type: 'leave' as const }]);
+            setTimeout(() => setRoomNotifications(p => p.filter(n => n.id !== nid)), 4000);
+          }
         }
       });
       prevMembersRef.current = { ...(m || {}) };

@@ -40,27 +40,26 @@ export class WebcamMeshService {
       this.updateMembers(this.lastMembers);
     }
 
-    // Replace tracks on existing connections
+    // Replace tracks on existing connections seamlessly without renegotiation
     this.peers.forEach((pc, peerUid) => {
-      const senders = pc.getSenders();
-      if (stream) {
-        stream.getTracks().forEach(track => {
-          const sender = senders.find(s => s.track?.kind === track.kind);
-          if (sender) {
-            sender.replaceTrack(track).catch(err =>
-              console.warn(`[WebcamMesh] replaceTrack failed for ${peerUid}:`, err)
-            );
-          } else {
-            pc.addTrack(track, stream);
-          }
-        });
-      } else {
-        // If stream is disabled, remove local tracks from peer connection
-        senders.forEach(sender => {
-          if (sender.track) {
-            pc.removeTrack(sender);
-          }
-        });
+      const transceivers = pc.getTransceivers();
+      const audioTransceiver = transceivers.find(t => t.receiver.track.kind === 'audio');
+      const videoTransceiver = transceivers.find(t => t.receiver.track.kind === 'video');
+
+      const audioTrack = stream?.getAudioTracks()[0] || null;
+      const videoTrack = stream?.getVideoTracks()[0] || null;
+
+      if (audioTransceiver?.sender) {
+        console.log(`[WebcamMesh] Replacing audio track for ${peerUid}. Active:`, !!audioTrack);
+        audioTransceiver.sender.replaceTrack(audioTrack).catch(err => 
+          console.warn(`[WebcamMesh] replaceTrack audio failed for ${peerUid}:`, err)
+        );
+      }
+      if (videoTransceiver?.sender) {
+        console.log(`[WebcamMesh] Replacing video track for ${peerUid}. Active:`, !!videoTrack);
+        videoTransceiver.sender.replaceTrack(videoTrack).catch(err => 
+          console.warn(`[WebcamMesh] replaceTrack video failed for ${peerUid}:`, err)
+        );
       }
     });
   }
@@ -75,19 +74,8 @@ export class WebcamMeshService {
       // Connect if peer is online
       const shouldConnect = member.online;
       const hasConnection = this.peers.has(peerUid);
-      const prevMember = this.lastMembers[peerUid];
 
-      // Reconnect if cam or mic status changed, to avoid dynamic m-line order conflicts
-      const statusChanged = prevMember && (
-        prevMember.isCamOn !== member.isCamOn || 
-        prevMember.isMicOn !== member.isMicOn
-      );
-
-      if (shouldConnect && (!hasConnection || statusChanged)) {
-        if (hasConnection) {
-          console.log(`[WebcamMesh] Media status changed for peer ${peerUid}. Recreating peer connection.`);
-          this.disconnectPeer(peerUid);
-        }
+      if (shouldConnect && !hasConnection) {
         this.connectPeer(peerUid);
       } else if (!shouldConnect && hasConnection) {
         this.disconnectPeer(peerUid);
@@ -115,23 +103,33 @@ export class WebcamMeshService {
     this.peers.set(peerUid, pc);
     this.unsubscribers.set(peerUid, []);
 
+    // Create persistent transceivers for audio and video
+    pc.addTransceiver('audio', { direction: 'sendrecv' });
+    pc.addTransceiver('video', { direction: 'sendrecv' });
+
     const remoteStream = new MediaStream();
 
     // When remote track arrives
     pc.ontrack = (e) => {
       console.log(`[WebcamMesh] Received track from peer ${peerUid}:`, e.track.kind);
-      e.streams[0]?.getTracks().forEach((track) => {
-        if (!remoteStream.getTracks().find(t => t.id === track.id)) {
-          remoteStream.addTrack(track);
-        }
-      });
+      // Only add to remoteStream if it's not already there
+      if (!remoteStream.getTracks().find(t => t.id === e.track.id)) {
+        remoteStream.addTrack(e.track);
+      }
       this.onStreamChange(peerUid, remoteStream);
     };
 
-    // Add local tracks if they exist
+    // Add local tracks to the established transceivers if they exist
     if (this.localStream) {
+      const senders = pc.getSenders();
       this.localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, this.localStream!);
+        const sender = senders.find(s => 
+          s.track?.kind === track.kind || 
+          (!s.track && pc.getTransceivers().find(t => t.sender === s)?.receiver.track.kind === track.kind)
+        );
+        if (sender) {
+          sender.replaceTrack(track).catch(() => {});
+        }
       });
     }
 
