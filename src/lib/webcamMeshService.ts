@@ -107,30 +107,34 @@ export class WebcamMeshService {
     pc.addTransceiver('audio', { direction: 'sendrecv' });
     pc.addTransceiver('video', { direction: 'sendrecv' });
 
-    const remoteStream = new MediaStream();
+    let remoteStream = new MediaStream();
 
     // When remote track arrives
     pc.ontrack = (e) => {
       console.log(`[WebcamMesh] Received track from peer ${peerUid}:`, e.track.kind);
-      // Only add to remoteStream if it's not already there
-      if (!remoteStream.getTracks().find(t => t.id === e.track.id)) {
-        remoteStream.addTrack(e.track);
+      const newStream = new MediaStream(remoteStream.getTracks());
+      if (!newStream.getTracks().find(t => t.id === e.track.id)) {
+        newStream.addTrack(e.track);
       }
+      remoteStream = newStream;
       this.onStreamChange(peerUid, remoteStream);
     };
 
     // Add local tracks to the established transceivers if they exist
     if (this.localStream) {
-      const senders = pc.getSenders();
-      this.localStream.getTracks().forEach((track) => {
-        const sender = senders.find(s => 
-          s.track?.kind === track.kind || 
-          (!s.track && pc.getTransceivers().find(t => t.sender === s)?.receiver.track.kind === track.kind)
-        );
-        if (sender) {
-          sender.replaceTrack(track).catch(() => {});
-        }
-      });
+      const transceivers = pc.getTransceivers();
+      const audioTransceiver = transceivers.find(t => t.receiver.track.kind === 'audio');
+      const videoTransceiver = transceivers.find(t => t.receiver.track.kind === 'video');
+
+      const audioTrack = this.localStream.getAudioTracks()[0] || null;
+      const videoTrack = this.localStream.getVideoTracks()[0] || null;
+
+      if (audioTransceiver?.sender && audioTrack) {
+        audioTransceiver.sender.replaceTrack(audioTrack).catch(() => {});
+      }
+      if (videoTransceiver?.sender && videoTrack) {
+        videoTransceiver.sender.replaceTrack(videoTrack).catch(() => {});
+      }
     }
 
     const initiatorUid = isInitiator ? this.userId : peerUid;
