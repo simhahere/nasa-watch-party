@@ -301,16 +301,16 @@ export default function RoomPage() {
     return () => { u(); rtc.cleanup(); };
   }, [user, code]);
 
-  // Host screen broadcast
+  // Screen broadcast
   useEffect(() => {
-    if (!isOwner || !rtcRef.current || !screenStream) { if (isOwner) rtcRef.current?.stopBroadcast(); return; }
+    if (!rtcRef.current || !screenStream) { rtcRef.current?.stopBroadcast(); return; }
     let active = true;
     const iv = setInterval(async () => {
       if (!active) { clearInterval(iv); return; }
       if (screenStream.getTracks().length > 0) { clearInterval(iv); await rtcRef.current?.startBroadcast(screenStream).catch(console.error); }
     }, 1000);
     return () => { active = false; clearInterval(iv); };
-  }, [isOwner, screenStream]);
+  }, [screenStream]);
 
   // WebRTC mesh
   useEffect(() => {
@@ -518,17 +518,17 @@ export default function RoomPage() {
             {isOnline ? <Wifi size={11} /> : <WifiOff size={11} />}
             <span>{isOnline ? 'Online' : 'Offline'}</span>
           </div>
-          {isOwner && screenStream && (
+          {screenStream && (
             <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-semibold">
               <span className="w-2 h-2 rounded-full bg-red-500 relative pulse-dot" /><span>You are Live</span>
               <button type="button" onClick={() => { screenStream.getTracks().forEach(t => t.stop()); setScreenStream(null); rtcRef.current?.stopBroadcast(); }} className="ml-1 px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-200 text-[10px] uppercase font-bold border border-red-500/30 transition-all">Stop</button>
             </div>
           )}
-          {isOwner && streamUrl && !screenStream && (
+          {(streamUrl || localFile) && !screenStream && (
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-semibold truncate max-w-[200px]">
               <span className="w-2 h-2 rounded-full bg-cyan-400 relative pulse-dot shrink-0" />
-              <span className="truncate">{currentVideoTitle || 'Streaming'}</span>
-              <button type="button" onClick={() => { setStreamUrl(null); setEmbedUrl(null); setCurrentVideoTitle(''); syncRef.current?.clearVideo(); }} className="ml-1 px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-100 text-[10px] uppercase font-bold border border-cyan-500/30 transition-all shrink-0">Stop</button>
+              <span className="truncate">{currentVideoTitle || (localFile ? localFile.name : 'Streaming')}</span>
+              <button type="button" onClick={() => { setStreamUrl(null); setEmbedUrl(null); setLocalFile(null); setCurrentVideoTitle(''); syncRef.current?.clearVideo(); rtcRef.current?.stopBroadcast(); }} className="ml-1 px-1.5 py-0.5 rounded bg-cyan-500/20 hover:bg-cyan-500/40 text-cyan-100 text-[10px] uppercase font-bold border border-cyan-500/30 transition-all shrink-0">Stop</button>
             </div>
           )}
           {!isOwner && p2pStream && (
