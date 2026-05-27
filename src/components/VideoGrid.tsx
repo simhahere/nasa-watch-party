@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -253,17 +254,21 @@ export default function VideoGrid({ tiles, className = '' }: VideoGridProps) {
   if (tiles.length === 0) return null;
 
   return (
-    <div
+    <motion.div
+      drag
+      dragMomentum={false}
       className={[
-        'flex flex-col-reverse gap-3 items-end',
+        'flex flex-col-reverse gap-3 items-end cursor-move',
         className,
       ]
         .filter(Boolean)
         .join(' ')}
+      whileDrag={{ scale: 1.02 }}
+      style={{ zIndex: 100 }}
     >
       {tiles.map((tile) => (
         <VideoTileBubble key={tile.uid} tile={tile} />
       ))}
-    </div>
+    </motion.div>
   );
 }
