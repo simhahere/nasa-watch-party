@@ -416,13 +416,6 @@ export default function RoomPage() {
     syncRef.current?.setEmbedUrl(url); setShowVideoModal(false);
   }, []);
 
-  const handleCloudinaryUpload = useCallback((url: string, title: string, duration?: number) => {
-    setStreamUrl(url); setEmbedUrl(null); setCurrentVideoTitle(title);
-    const src = { url, title, duration: duration ?? 0, type: 'cloudinary' as const };
-    const svc = syncRef.current as any;
-    svc?.setVideoSource ? svc.setVideoSource(src) : syncRef.current?.setStreamUrl(url);
-    setShowVideoModal(false);
-  }, []);
 
   const handleSelectFile = useCallback((file: File) => {
     setLocalFile(file);
@@ -710,7 +703,7 @@ export default function RoomPage() {
             onSelectEmbed={handleSelectEmbed}
             onSelectFile={handleSelectFile}
             onStartScreenShare={handleStartScreenShare}
-            onCloudinaryUpload={handleCloudinaryUpload}
+
             isOwner={isOwner}
           />
         )}

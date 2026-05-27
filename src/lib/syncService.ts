@@ -46,7 +46,7 @@ export type VideoSource = {
   url: string;       // CDN or stream URL
   title: string;     // Display title
   duration?: number; // Duration in seconds
-  type: 'cloudinary' | 'url' | 'embed';
+  type: 'url' | 'embed';
 };
 
 // ─── SyncService ──────────────────────────────────────────────────────────────
@@ -173,7 +173,7 @@ export class SyncService {
   async setVideoSource(source: VideoSource): Promise<void> {
     await set(this.roomRef('videoSource'), source);
 
-    if (source.type === 'cloudinary' || source.type === 'url') {
+    if (source.type === 'url') {
       await this.setStreamUrl(source.url);
     } else if (source.type === 'embed') {
       await this.setEmbedUrl(source.url);
