@@ -111,7 +111,7 @@ export class VideoCallService {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
           const offerPath = `rooms/${this.roomCode}/videoCall/offers/${this.userId}/${peerUid}`;
-          await set(ref(database, offerPath), offer.toJSON());
+          await set(ref(database, offerPath), { type: offer.type, sdp: offer.sdp });
         } catch (err) {
           this.callbacks.onError?.(err);
         }
@@ -164,7 +164,7 @@ export class VideoCallService {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
     const answerPath = `rooms/${this.roomCode}/videoCall/answers/${this.userId}/${peerUid}`;
-    await set(ref(database, answerPath), answer.toJSON());
+    await set(ref(database, answerPath), { type: answer.type, sdp: answer.sdp });
 
     // Listen for initiator ICE candidates
     const candPath = `rooms/${this.roomCode}/videoCall/candidates/${peerUid}/${this.userId}`;

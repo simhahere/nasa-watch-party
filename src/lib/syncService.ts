@@ -40,6 +40,7 @@ export type RoomMember = {
   lastSeen: number | object;
   isCamOn?: boolean;
   isMicOn?: boolean;
+  role?: string;
 };
 
 export type VideoSource = {

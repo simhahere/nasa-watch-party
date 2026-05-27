@@ -11,7 +11,7 @@ interface ChatMessage {
   senderPhoto: string;
   senderId?: string;
   timestamp: number;
-  type?: 'chat' | 'system';
+  type?: string;
 }
 
 interface ChatPanelProps {

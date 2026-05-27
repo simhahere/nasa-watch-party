@@ -274,12 +274,10 @@ function SpeedSelector({ speed, onChange }: SpeedSelectorProps) {
 interface SyncBadgeProps {
   synced: boolean;
   syncing: boolean;
-  watchMode: 'synced' | 'free';
   isOwner: boolean;
 }
 
-function SyncBadge({ synced, syncing, watchMode, isOwner }: SyncBadgeProps) {
-  if (watchMode === 'free') return null;
+function SyncBadge({ synced, syncing, isOwner }: SyncBadgeProps) {
 
   if (isOwner) {
     return (
