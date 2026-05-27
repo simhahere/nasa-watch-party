@@ -2,7 +2,6 @@
 
 import React, { useCallback, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import CloudinaryUpload from './CloudinaryUpload';
 
 interface SelectVideoModalProps {
   isOpen: boolean;
@@ -14,7 +13,7 @@ interface SelectVideoModalProps {
   onStartScreenShare: () => void;
 }
 
-type Tab = 'url' | 'upload' | 'embed' | 'screen';
+type Tab = 'url' | 'file' | 'screen';
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -121,20 +120,11 @@ export default function SelectVideoModal({
       ),
     },
     {
-      id: 'upload',
-      label: 'Upload',
+      id: 'file',
+      label: 'Local File',
       icon: (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-        </svg>
-      ),
-    },
-    {
-      id: 'embed',
-      label: 'Embed',
-      icon: (
-        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
         </svg>
       ),
     },
@@ -279,189 +269,88 @@ export default function SelectVideoModal({
                   </motion.div>
                 )}
 
-                {/* === OTT & EMBED SITE TAB === */}
-                {activeTab === 'embed' && (
+                {/* === LOCAL FILE TAB === */}
+                {activeTab === 'file' && (
                   <motion.div
-                    key="embed"
+                    key="file"
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 10 }}
                     transition={{ duration: 0.15 }}
                     className="space-y-4"
                   >
-                    <div>
-                      <label className="block text-white/60 text-xs font-medium mb-2">
-                        OTT / Movie Site URL
-                      </label>
-                      <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 focus-within:border-purple-500/50 transition-all">
-                        <svg className="w-4 h-4 text-white/30 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-                        </svg>
-                        <input
-                          type="url"
-                          value={embedInput}
-                          onChange={(e) => {
-                            setEmbedInput(e.target.value);
-                            setSelectedOtt(null);
-                          }}
-                          placeholder="https://netmirror.plus/movie/..."
-                          className="flex-1 bg-transparent text-white text-sm placeholder-white/25 outline-none min-w-0"
-                        />
-                      </div>
-                    </div>
+                    <div
+                      className={`relative overflow-hidden border-2 border-dashed rounded-xl transition-all duration-300 ${
+                        isDragging
+                          ? 'border-blue-500 bg-blue-500/10 scale-[1.02]'
+                          : 'border-white/20 bg-white/5 hover:bg-white/10 hover:border-white/30'
+                      }`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                    >
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileChange}
+                        accept="video/mp4,video/webm"
+                        className="hidden"
+                      />
 
-                    {/* OTT Grid Selection */}
-                    <div>
-                      <span className="block text-white/40 text-[10px] font-semibold uppercase tracking-wider mb-2">
-                        Quick Launch OTT & Movie Sites
-                      </span>
-                      <div className="grid grid-cols-5 gap-2">
-                        {[
-                          { name: 'NetMirror', url: 'https://netmirror.plus/', logo: '🎬', isEmbeddable: true, color: 'hover:border-pink-500/50 hover:bg-pink-500/10' },
-                          { name: 'Netflix', url: 'https://netflix.com', logo: '🍿', isEmbeddable: false, color: 'hover:border-red-500/50 hover:bg-red-500/10' },
-                          { name: 'JioCinema', url: 'https://jiocinema.com', logo: '👁️', isEmbeddable: false, color: 'hover:border-fuchsia-500/50 hover:bg-fuchsia-500/10' },
-                          { name: 'Hotstar', url: 'https://hotstar.com', logo: '🌟', isEmbeddable: false, color: 'hover:border-blue-500/50 hover:bg-blue-500/10' },
-                          { name: 'Prime', url: 'https://primevideo.com', logo: '💙', isEmbeddable: false, color: 'hover:border-cyan-500/50 hover:bg-cyan-500/10' },
-                        ].map((ott) => (
-                          <button
-                            key={ott.name}
-                            type="button"
-                            onClick={() => {
-                              setSelectedOtt(ott.name);
-                              if (ott.isEmbeddable) {
-                                setEmbedInput(ott.url);
-                              } else {
-                                setEmbedInput('');
-                              }
-                            }}
-                            className={`flex flex-col items-center justify-center p-2 rounded-xl border border-white/5 bg-white/[0.02] transition-all duration-200 active:scale-95 group ${
-                              selectedOtt === ott.name
-                                ? 'border-purple-500 bg-purple-500/10 shadow-lg shadow-purple-900/30'
-                                : ott.color
-                            }`}
-                          >
-                            <span className="text-lg group-hover:scale-110 transition-transform">{ott.logo}</span>
-                            <span className="text-[9px] text-white/50 group-hover:text-white mt-1 font-semibold truncate w-full text-center">
-                              {ott.name}
+                      <div className="flex flex-col items-center justify-center py-10 px-4 text-center cursor-pointer" onClick={() => fileInputRef.current?.click()}>
+                        {selectedFile ? (
+                          <>
+                            <div className="w-12 h-12 rounded-full bg-blue-500/20 flex items-center justify-center mb-3 text-blue-400 shadow-inner">
+                              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                            <span className="text-white font-medium text-sm truncate max-w-[200px] mb-1">
+                              {selectedFile.name}
                             </span>
-                          </button>
-                        ))}
+                            <span className="text-white/40 text-xs">{formatFileSize(selectedFile.size)}</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}
+                              className="mt-3 text-xs text-red-400 hover:text-red-300 transition-colors"
+                            >
+                              Remove file
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-3 text-white/50 group-hover:scale-110 transition-transform">
+                              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                              </svg>
+                            </div>
+                            <span className="text-white font-medium text-sm mb-1">Click or drag video file</span>
+                            <span className="text-white/40 text-xs text-balance">Supports MP4, WebM up to 10GB</span>
+                          </>
+                        )}
                       </div>
                     </div>
 
-                    {/* OTT Helper Box */}
-                    {selectedOtt && selectedOtt !== 'NetMirror' && (
-                      <div className="bg-purple-950/20 border border-purple-500/20 rounded-xl p-3.5 space-y-3">
-                        <div className="flex items-center gap-2 text-purple-400 text-xs font-semibold">
-                          <span>🌐</span>
-                          <span>Streaming {selectedOtt} Together</span>
-                        </div>
-                        <p className="text-white/60 text-[11px] leading-relaxed">
-                          Commercial OTT platforms block direct embedding inside browser iframes due to DRM and security policies.
-                        </p>
-                        
-                        {/* Option 1: Direct screen share */}
-                        <div className="bg-white/[0.03] border border-white/5 rounded-lg p-2.5 space-y-1.5">
-                          <span className="block text-[10px] text-purple-300 font-bold uppercase tracking-wider">
-                            Option 1: Stream Streamer's Tab / Screen (Live)
-                          </span>
-                          <span className="block text-white/50 text-[10px] leading-relaxed">
-                            Share your active browser tab, window, or whole screen. Play the show/movie in that tab, and everyone will see and hear your playback instantly!
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onStartScreenShare();
-                              onClose();
-                            }}
-                            className="w-full mt-1.5 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition-all shadow-md active:scale-95 cursor-pointer"
-                          >
-                            🖥️ Start Live Screen Share
-                          </button>
-                        </div>
-
-                        {/* Option 2: File sync */}
-                        <div className="bg-white/[0.02] border border-white/5 rounded-lg p-2.5 space-y-1">
-                          <span className="block text-[10px] text-white/40 font-bold uppercase tracking-wider">
-                            Option 2: High-Def File Stream
-                          </span>
-                          <span className="block text-white/50 text-[10px] leading-relaxed">
-                            Drag your downloaded movie file into the <strong>Local File</strong> tab. This uses our low-latency P2P WebRTC connection to broadcast it perfectly to everyone!
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const urls: Record<string, string> = {
-                              Netflix: 'https://netflix.com',
-                              JioCinema: 'https://jiocinema.com',
-                              Hotstar: 'https://hotstar.com',
-                              Prime: 'https://primevideo.com',
-                            };
-                            window.open(urls[selectedOtt], '_blank');
-                          }}
-                          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-white/70 text-[11px] font-semibold transition-all cursor-pointer"
-                        >
-                          Open {selectedOtt} Site in New Tab ↗
-                        </button>
-                      </div>
-                    )}
-
-                    {/* NetMirror Info */}
-                    {(!selectedOtt || selectedOtt === 'NetMirror') && (
-                      <div className="bg-emerald-950/20 border border-emerald-500/20 rounded-xl p-3.5 space-y-1">
-                        <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
-                          <span>✅</span>
-                          <span>NetMirror Integration Enabled</span>
-                        </div>
-                        <p className="text-white/50 text-[11px] leading-relaxed">
-                          <strong>NetMirror (netmirror.plus)</strong> is natively supported! Enter any movie link from netmirror.plus, and it will load perfectly for all party members.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Warning */}
-                    <div className="flex items-start gap-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg px-3 py-2">
-                      <svg className="w-3.5 h-3.5 text-yellow-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/20 rounded-lg px-3 py-2">
+                      <svg className="w-3.5 h-3.5 text-blue-400 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
-                      <span className="text-yellow-300/80 text-xs">
-                        Playback sync is manual in embed mode
+                      <span className="text-blue-300/80 text-xs">
+                        This file will be broadcasted P2P to everyone in the room. You must remain on the page to keep the broadcast active.
                       </span>
                     </div>
 
                     <button
-                      onClick={handleLoadEmbed}
-                      disabled={!isValidUrl(embedInput)}
-                      className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:from-white/10 disabled:to-white/10 disabled:cursor-not-allowed text-white font-semibold text-sm py-2.5 rounded-xl transition-all shadow-lg shadow-purple-900/30 active:scale-[0.98]"
+                      onClick={handlePlayFile}
+                      disabled={!selectedFile}
+                      className="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 disabled:from-white/10 disabled:to-white/10 disabled:cursor-not-allowed text-white font-semibold text-sm py-2.5 rounded-xl transition-all shadow-lg shadow-blue-900/30 active:scale-[0.98]"
                     >
-                      Load Embedded Player
+                      Broadcast File to Room
                     </button>
                   </motion.div>
                 )}
 
-                {/* === UPLOAD TAB === */}
-                {activeTab === 'upload' && (
-                  <motion.div
-                    key="upload"
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    exit={{ opacity: 0, x: 10 }}
-                    transition={{ duration: 0.15 }}
-                    className="space-y-4"
-                  >
-                    <CloudinaryUpload
-                      onSuccess={(url, _title, _duration) => {
-                        onSelectUrl(url);
-                        onClose();
-                      }}
-                    />
-                  </motion.div>
-                )}
-
                 {/* === SCREEN SHARE TAB === */}
-                {activeTab === 'screen' && isOwner && (
+                {activeTab === 'screen' && (
                   <motion.div
                     key="screen"
                     initial={{ opacity: 0, x: -10 }}

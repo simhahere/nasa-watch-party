@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 
 interface ChatMessage {
   id: string;
@@ -188,7 +189,7 @@ export default function ChatPanel({
         className="flex-1 overflow-y-auto px-3 py-3 space-y-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
       >
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full gap-2 text-white/30 select-none">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center justify-center h-full gap-2 text-white/30 select-none">
             <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
@@ -198,9 +199,10 @@ export default function ChatPanel({
               />
             </svg>
             <p className="text-xs">Be the first to say something!</p>
-          </div>
+          </motion.div>
         )}
 
+        <AnimatePresence initial={false}>
         {(() => {
           const renderedIds = new Set<string>();
           return messages.map((msg, index) => {
@@ -214,19 +216,28 @@ export default function ChatPanel({
             // System message
             if (msg.type === 'system') {
               return (
-                <div key={msg.id} className="flex justify-center items-center py-1">
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 24 }}
+                  key={msg.id} 
+                  className="flex justify-center items-center py-1"
+                >
                   <span className="text-white/35 text-[11px] italic bg-white/5 rounded-full px-3 py-0.5">
                     {msg.text}
                   </span>
-                </div>
+                </motion.div>
               );
             }
 
             if (isReactionMsg) {
             return (
-              <div
+              <motion.div
+                initial={{ opacity: 0, scale: 0.5, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                 key={msg.id}
-                className={`flex justify-center items-center py-1 message-enter ${isNewMsg ? 'message-enter' : ''}`}
+                className={`flex justify-center items-center py-1`}
               >
                 <div className="group relative flex flex-col items-center">
                   <span className="text-4xl leading-none select-none drop-shadow-lg">
@@ -237,15 +248,18 @@ export default function ChatPanel({
                     {formatTimestamp(msg.timestamp)}
                   </span>
                 </div>
-              </div>
+              </motion.div>
             );
           }
 
           if (isOwn) {
             return (
-              <div
+              <motion.div
+                initial={{ opacity: 0, x: 20, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                transition={{ type: 'spring', stiffness: 300, damping: 24 }}
                 key={msg.id}
-                className={`flex justify-end items-end gap-1.5 message-enter ${isNewMsg ? 'message-enter' : ''}`}
+                className={`flex justify-end items-end gap-1.5`}
               >
                 <div className="group relative flex flex-col items-end max-w-[78%]">
                   <div className="bg-gradient-to-br from-blue-500 to-blue-700 text-white text-sm px-3 py-2 rounded-2xl rounded-br-sm shadow-lg shadow-blue-900/30 break-words">
@@ -255,14 +269,17 @@ export default function ChatPanel({
                     {formatTimestamp(msg.timestamp)}
                   </span>
                 </div>
-              </div>
+              </motion.div>
             );
           }
 
           return (
-            <div
+            <motion.div
+              initial={{ opacity: 0, x: -20, scale: 0.95 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 24 }}
               key={msg.id}
-              className={`flex items-end gap-2 message-enter ${isNewMsg ? 'message-enter' : ''}`}
+              className={`flex items-end gap-2`}
             >
               {/* Avatar */}
               <div className="flex-shrink-0 mb-0.5">
@@ -289,10 +306,11 @@ export default function ChatPanel({
                   {formatTimestamp(msg.timestamp)}
                 </span>
               </div>
-            </div>
+            </motion.div>
           );
           });
         })()}
+        </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
 

@@ -134,6 +134,7 @@ export default function RoomPage() {
 
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+  const [localFile, setLocalFile] = useState<File | null>(null);
   const [p2pStream, setP2pStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const [externalPlayback, setExternalPlayback] = useState<any>(null);
@@ -423,11 +424,18 @@ export default function RoomPage() {
     setShowVideoModal(false);
   }, []);
 
-  const handleSelectFile = useCallback(() => { setShowVideoModal(false); }, []);
+  const handleSelectFile = useCallback((file: File) => {
+    setLocalFile(file);
+    setStreamUrl(null);
+    setEmbedUrl(null);
+    setScreenStream(null);
+    syncRef.current?.setStreamUrl('');
+    setShowVideoModal(false);
+  }, []);
 
   const handlePlaybackChange = useCallback((state: any) => {
-    if (isOwner) syncRef.current?.publishPlayback({ ...state, ownerId: user?.uid });
-  }, [isOwner, user]);
+    if (isOwner || localFile || screenStream) syncRef.current?.publishPlayback({ ...state, ownerId: user?.uid });
+  }, [isOwner, user, localFile, screenStream]);
 
   const handleCopyCode = useCallback(() => {
     navigator.clipboard.writeText(code).catch(() => {}); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000);
@@ -488,11 +496,22 @@ export default function RoomPage() {
 
       {/* Floating reactions */}
       <AnimatePresence>
-        {reactions.map(r => (
-          <motion.div key={r.id} initial={{ y: 0, opacity: 1, scale: 1 }} animate={{ y: -140, opacity: 0, scale: 1.6 }} exit={{ opacity: 0 }} transition={{ duration: 2, ease: 'easeOut' }} className="fixed pointer-events-none z-[9999] text-3xl select-none" style={{ left: `${r.x}%`, bottom: '90px' }}>
-            {r.emoji}
-          </motion.div>
-        ))}
+        {reactions.map(r => {
+          const drift = r.x > 50 ? 20 : -20;
+          return (
+            <motion.div 
+              key={r.id} 
+              initial={{ y: 0, x: 0, opacity: 0, scale: 0.5, rotate: -30 }} 
+              animate={{ y: -180, x: drift, opacity: [0, 1, 1, 0], scale: [0.5, 1.8, 1.8, 1.4], rotate: 30 }} 
+              exit={{ opacity: 0, scale: 0 }} 
+              transition={{ duration: 2.2, ease: [0.23, 1, 0.32, 1] }} 
+              className="fixed pointer-events-none z-[9999] text-5xl select-none filter drop-shadow-2xl" 
+              style={{ left: `${r.x}%`, bottom: '90px' }}
+            >
+              {r.emoji}
+            </motion.div>
+          );
+        })}
       </AnimatePresence>
 
       {/* TOP BAR */}
@@ -550,14 +569,20 @@ export default function RoomPage() {
           <VideoPlayer
             streamUrl={p2pStream ? null : streamUrl}
             embedUrl={embedUrl}
-            localFile={null}
+            localFile={p2pStream ? null : localFile}
             p2pStream={p2pStream || screenStream}
-            isOwner={isOwner}
+            isOwner={isOwner || !!localFile || !!screenStream}
             hostName={Object.values(members || {}).find((m: any) => m?.role === 'owner' || m?.uid === externalPlayback?.ownerId)?.name || 'Host'}
             onPlaybackChange={handlePlaybackChange}
             externalState={externalPlayback}
             fullscreenContainerRef={videoAreaRef}
             ref={videoPlayerRef}
+            onVideoReady={(el) => {
+              if (localFile && (el as any).captureStream) {
+                const stream = (el as any).captureStream();
+                rtcRef.current?.startBroadcast(stream).catch(console.error);
+              }
+            }}
           />
 
           {/* VideoGrid: webcam bubbles */}
@@ -656,11 +681,9 @@ export default function RoomPage() {
             <ControlBtn active={isCamOn} onIcon={<Video size={16} />} offIcon={<VideoOff size={16} />} label={isCamOn ? 'Cam On' : 'Cam Off'} onToggle={() => setIsCamOn(v => !v)} />
           </div>
           <div className="flex items-center gap-1.5">
-            {isOwner && (
-              <button onClick={() => setShowVideoModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-2xl glass border border-cyan-500/30 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all">
-                <Tv2 size={14} /><span className="hidden sm:block">Select Video</span>
-              </button>
-            )}
+            <button onClick={() => setShowVideoModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-2xl glass border border-cyan-500/30 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all">
+              <Tv2 size={14} /><span className="hidden sm:block">Select Video</span>
+            </button>
             {streamQueue.length > 0 && (
               <button className="flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-semibold transition-all border glass border-white/10 text-white/50">
                 <Music2 size={14} /><span className="bg-purple-500 text-white rounded-full text-[10px] px-1 min-w-[16px] text-center">{streamQueue.length}</span>
