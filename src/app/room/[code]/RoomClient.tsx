@@ -143,6 +143,7 @@ export default function RoomPage() {
   const [isOwner, setIsOwner] = useState(false);
   const [members, setMembers] = useState<Record<string, any>>({});
   const [streamQueue, setStreamQueue] = useState<any[]>([]);
+  const [activeScreenShare, setActiveScreenShare] = useState<{ uid: string; name: string; timestamp: number } | null>(null);
 
   const { messages, sendMessage } = useChat(code || null, user?.uid ?? null, displayName || 'Guest', user?.photoURL ?? '');
 
@@ -285,7 +286,10 @@ export default function RoomPage() {
 
     const isCreator = localStorage.getItem('nasa_room_code') === code;
     svc.joinRoom(displayName, user.photoURL ?? '', isCreator ? 'owner' : 'member');
-    return () => { u1(); u2(); u3(); u5(); u6(); u8(); if (typeof u7 === 'function') u7(); svc.leaveRoom(); svc.cleanup(); };
+    
+    const u9 = svc.onActiveScreenShare(setActiveScreenShare);
+    
+    return () => { u1(); u2(); u3(); u5(); u6(); u8(); u9(); if (typeof u7 === 'function') u7(); svc.leaveRoom(); svc.cleanup(); };
   }, [user, code, displayName]);
 
   // P2P viewer stream
@@ -337,17 +341,26 @@ export default function RoomPage() {
   // Local media
   useEffect(() => {
     let active: MediaStream | null = null;
+    let isActive = true;
+    syncRef.current?.updateMemberStatus({ isCamOn, isMicOn }); // Instant zero-latency presence update
     const go = async () => {
       if (isCamOn || isMicOn) {
         try {
-          const s = await navigator.mediaDevices.getUserMedia({ video: isCamOn ? { width: 320, height: 320, facingMode: 'user' } : false, audio: isMicOn });
-          setLocalMediaStream(s); active = s;
-          syncRef.current?.updateMemberStatus({ isCamOn, isMicOn });
+          const s = await navigator.mediaDevices.getUserMedia({ 
+            video: isCamOn ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 }, facingMode: 'user' } : false, 
+            audio: isMicOn ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true } : false 
+          });
+          if (!isActive) { s.getTracks().forEach(t => t.stop()); return; }
+          setLocalMediaStream(s); 
+          active = s;
         } catch { if (isCamOn) setIsCamOn(false); if (isMicOn) setIsMicOn(false); }
-      } else { localMediaStream?.getTracks().forEach(t => t.stop()); setLocalMediaStream(null); }
+      } else { 
+        localMediaStream?.getTracks().forEach(t => t.stop()); 
+        setLocalMediaStream(null); 
+      }
     };
     go();
-    return () => { active?.getTracks().forEach(t => t.stop()); };
+    return () => { isActive = false; active?.getTracks().forEach(t => t.stop()); };
   }, [isCamOn, isMicOn]);
   
   useEffect(() => {
@@ -400,11 +413,18 @@ export default function RoomPage() {
 
   const handleStartScreenShare = useCallback(async () => {
     try {
-      const s = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always' } as any, audio: true });
+      const s = await navigator.mediaDevices.getDisplayMedia({ video: { cursor: 'always', frameRate: { ideal: 60 } } as any, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
       setScreenStream(s); setStreamUrl(null); setEmbedUrl(null);
-      s.getVideoTracks()[0].onended = () => { setScreenStream(null); rtcRef.current?.stopBroadcast(); };
+      syncRef.current?.setActiveScreenShare({ uid: user?.uid || '', name: displayName || 'User', timestamp: Date.now() });
+      s.getVideoTracks()[0].onended = () => { setScreenStream(null); rtcRef.current?.stopBroadcast(); syncRef.current?.setActiveScreenShare(null); };
     } catch {}
-  }, []);
+  }, [user, displayName]);
+
+  const handleRequestScreenShare = useCallback(() => {
+    if (activeScreenShare) {
+      sendMessage(`✋ I would like to share my screen. Could you please yield, @${activeScreenShare.name}?`);
+    }
+  }, [activeScreenShare, sendMessage]);
 
   const handleSelectUrl = useCallback((url: string) => {
     setStreamUrl(url); setEmbedUrl(null); setCurrentVideoTitle(url);
@@ -521,7 +541,7 @@ export default function RoomPage() {
           {screenStream && (
             <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-semibold">
               <span className="w-2 h-2 rounded-full bg-red-500 relative pulse-dot" /><span>You are Live</span>
-              <button type="button" onClick={() => { screenStream.getTracks().forEach(t => t.stop()); setScreenStream(null); rtcRef.current?.stopBroadcast(); }} className="ml-1 px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-200 text-[10px] uppercase font-bold border border-red-500/30 transition-all">Stop</button>
+              <button type="button" onClick={() => { screenStream.getTracks().forEach(t => t.stop()); setScreenStream(null); rtcRef.current?.stopBroadcast(); syncRef.current?.setActiveScreenShare(null); }} className="ml-1 px-1.5 py-0.5 rounded bg-red-500/20 hover:bg-red-500/40 text-red-200 text-[10px] uppercase font-bold border border-red-500/30 transition-all">Stop</button>
             </div>
           )}
           {(streamUrl || localFile) && !screenStream && (
@@ -703,7 +723,8 @@ export default function RoomPage() {
             onSelectEmbed={handleSelectEmbed}
             onSelectFile={handleSelectFile}
             onStartScreenShare={handleStartScreenShare}
-
+            onRequestScreenShare={handleRequestScreenShare}
+            activeScreenShare={activeScreenShare}
             isOwner={isOwner}
           />
         )}

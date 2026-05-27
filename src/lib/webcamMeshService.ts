@@ -42,24 +42,18 @@ export class WebcamMeshService {
 
     // Replace tracks on existing connections seamlessly without renegotiation
     this.peers.forEach((pc, peerUid) => {
-      const transceivers = pc.getTransceivers();
-      const audioTransceiver = transceivers.find(t => t.receiver.track.kind === 'audio');
-      const videoTransceiver = transceivers.find(t => t.receiver.track.kind === 'video');
+      const senders = pc.getSenders();
+      const audioSender = senders.find(s => s.track?.kind === 'audio' || s.track === null && pc.getTransceivers().find(t => t.sender === s)?.receiver.track.kind === 'audio');
+      const videoSender = senders.find(s => s.track?.kind === 'video' || s.track === null && pc.getTransceivers().find(t => t.sender === s)?.receiver.track.kind === 'video');
 
       const audioTrack = stream?.getAudioTracks()[0] || null;
       const videoTrack = stream?.getVideoTracks()[0] || null;
 
-      if (audioTransceiver?.sender) {
-        console.log(`[WebcamMesh] Replacing audio track for ${peerUid}. Active:`, !!audioTrack);
-        audioTransceiver.sender.replaceTrack(audioTrack).catch(err => 
-          console.warn(`[WebcamMesh] replaceTrack audio failed for ${peerUid}:`, err)
-        );
+      if (audioSender) {
+        audioSender.replaceTrack(audioTrack).catch(() => {});
       }
-      if (videoTransceiver?.sender) {
-        console.log(`[WebcamMesh] Replacing video track for ${peerUid}. Active:`, !!videoTrack);
-        videoTransceiver.sender.replaceTrack(videoTrack).catch(err => 
-          console.warn(`[WebcamMesh] replaceTrack video failed for ${peerUid}:`, err)
-        );
+      if (videoSender) {
+        videoSender.replaceTrack(videoTrack).catch(() => {});
       }
     });
   }
@@ -103,15 +97,15 @@ export class WebcamMeshService {
     this.peers.set(peerUid, pc);
     this.unsubscribers.set(peerUid, []);
 
-    // Create persistent transceivers for audio and video
-    pc.addTransceiver('audio', { direction: 'sendrecv' });
-    pc.addTransceiver('video', { direction: 'sendrecv' });
+    if (isInitiator) {
+      pc.addTransceiver('audio', { direction: 'sendrecv' });
+      pc.addTransceiver('video', { direction: 'sendrecv' });
+    }
 
     let remoteStream = new MediaStream();
 
     // When remote track arrives
     pc.ontrack = (e) => {
-      console.log(`[WebcamMesh] Received track from peer ${peerUid}:`, e.track.kind);
       const newStream = new MediaStream(remoteStream.getTracks());
       if (!newStream.getTracks().find(t => t.id === e.track.id)) {
         newStream.addTrack(e.track);
@@ -120,21 +114,22 @@ export class WebcamMeshService {
       this.onStreamChange(peerUid, remoteStream);
     };
 
-    // Add local tracks to the established transceivers if they exist
-    if (this.localStream) {
-      const transceivers = pc.getTransceivers();
-      const audioTransceiver = transceivers.find(t => t.receiver.track.kind === 'audio');
-      const videoTransceiver = transceivers.find(t => t.receiver.track.kind === 'video');
-
+    // Helper to attach local tracks
+    const attachLocalTracks = () => {
+      if (!this.localStream) return;
+      const senders = pc.getSenders();
       const audioTrack = this.localStream.getAudioTracks()[0] || null;
       const videoTrack = this.localStream.getVideoTracks()[0] || null;
 
-      if (audioTransceiver?.sender && audioTrack) {
-        audioTransceiver.sender.replaceTrack(audioTrack).catch(() => {});
-      }
-      if (videoTransceiver?.sender && videoTrack) {
-        videoTransceiver.sender.replaceTrack(videoTrack).catch(() => {});
-      }
+      const audioSender = senders.find(s => s.track?.kind === 'audio' || s.track === null && pc.getTransceivers().find(t => t.sender === s)?.receiver.track.kind === 'audio');
+      const videoSender = senders.find(s => s.track?.kind === 'video' || s.track === null && pc.getTransceivers().find(t => t.sender === s)?.receiver.track.kind === 'video');
+
+      if (audioSender && audioTrack) audioSender.replaceTrack(audioTrack).catch(() => {});
+      if (videoSender && videoTrack) videoSender.replaceTrack(videoTrack).catch(() => {});
+    };
+
+    if (isInitiator) {
+      attachLocalTracks();
     }
 
     const initiatorUid = isInitiator ? this.userId : peerUid;
@@ -213,6 +208,9 @@ export class WebcamMeshService {
           const offer = snap.val();
           await pc.setRemoteDescription(new RTCSessionDescription(offer));
           isRemoteDescriptionSet = true;
+          
+          attachLocalTracks(); // Attach local tracks to the transceivers created by the offer before answering
+          
           processQueuedCandidates();
           
           const answer = await pc.createAnswer();

@@ -24,6 +24,12 @@ export type PlaybackState = {
 
 export type WatchMode = 'synced' | 'free';
 
+export type ActiveScreenShare = {
+  uid: string;
+  name: string;
+  timestamp: number;
+};
+
 export type StreamQueueEntry = {
   key: string;
   uid: string;
@@ -206,6 +212,7 @@ export class SyncService {
       remove(this.roomRef('streamUrl')),
       remove(this.roomRef('embedUrl')),
       remove(this.roomRef('videoSource')),
+      remove(this.roomRef('activeScreenShare')),
       set(this.roomRef('playback'), {
         status: 'idle' as const,
         position: 0,
@@ -243,6 +250,27 @@ export class SyncService {
     });
 
     return this.addListener('watchMode', () => off(watchModeRef, 'value', handler));
+  }
+
+  // ── Screen Share Tracking ───────────────────────────────────────────────────
+
+  async setActiveScreenShare(share: ActiveScreenShare | null): Promise<void> {
+    const shareRef = this.roomRef('activeScreenShare');
+    if (share) {
+      await set(shareRef, share);
+      await onDisconnect(shareRef).remove();
+    } else {
+      await remove(shareRef);
+      await onDisconnect(shareRef).cancel();
+    }
+  }
+
+  onActiveScreenShare(callback: (share: ActiveScreenShare | null) => void): () => void {
+    const shareRef = this.roomRef('activeScreenShare');
+    const handler = onValue(shareRef, (snapshot) => {
+      callback(snapshot.exists() ? (snapshot.val() as ActiveScreenShare) : null);
+    });
+    return this.addListener('activeScreenShare', () => off(shareRef, 'value', handler));
   }
 
   // ── Member Presence ───────────────────────────────────────────────────────────

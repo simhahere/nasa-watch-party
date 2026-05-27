@@ -11,6 +11,8 @@ interface SelectVideoModalProps {
   onSelectEmbed: (url: string) => void;
   onSelectFile: (file: File) => void;
   onStartScreenShare: () => void;
+  onRequestScreenShare: () => void;
+  activeScreenShare: { uid: string; name: string } | null;
 }
 
 type Tab = 'url' | 'file' | 'screen';
@@ -40,6 +42,8 @@ export default function SelectVideoModal({
   onSelectEmbed,
   onSelectFile,
   onStartScreenShare,
+  onRequestScreenShare,
+  activeScreenShare,
 }: SelectVideoModalProps) {
   const [activeTab, setActiveTab] = useState<Tab>('url');
 
@@ -378,16 +382,34 @@ export default function SelectVideoModal({
                           </span>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onStartScreenShare?.();
-                          onClose();
-                        }}
-                        className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-sm font-bold transition-all shadow-lg shadow-purple-900/30 active:scale-[0.98] cursor-pointer"
-                      >
-                        🖥️ Start Live Screen Share
-                      </button>
+                      {activeScreenShare ? (
+                        <div className="w-full flex flex-col gap-2">
+                          <div className="text-center text-xs text-orange-200 bg-orange-500/20 py-2 rounded-lg border border-orange-500/30">
+                            <strong>{activeScreenShare.name}</strong> is currently sharing their screen.
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onRequestScreenShare();
+                              onClose();
+                            }}
+                            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-500 hover:to-red-500 text-white text-sm font-bold transition-all shadow-lg shadow-orange-900/30 active:scale-[0.98] cursor-pointer"
+                          >
+                            ✋ Request Screen Share
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onStartScreenShare?.();
+                            onClose();
+                          }}
+                          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-sm font-bold transition-all shadow-lg shadow-purple-900/30 active:scale-[0.98] cursor-pointer"
+                        >
+                          🖥️ Start Live Screen Share
+                        </button>
+                      )}
                     </div>
                   </motion.div>
                 )}
