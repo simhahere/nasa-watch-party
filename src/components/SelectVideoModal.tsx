@@ -131,7 +131,6 @@ export default function SelectVideoModal({
     {
       id: 'screen',
       label: 'Screen Share',
-      ownerOnly: true,
       icon: (
         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -367,17 +366,17 @@ export default function SelectVideoModal({
                       </div>
                       <div className="text-center">
                         <h3 className="text-white font-semibold text-sm mb-1">Share Your Screen</h3>
-                        <p className="text-white/50 text-xs leading-relaxed max-w-xs">
+                        <p className="text-white/50 text-xs leading-relaxed max-w-xs mx-auto">
                           Broadcast your screen, a browser tab, or any app window live to all party members in real time.
                         </p>
                       </div>
-                      <div className="w-full bg-purple-950/20 border border-purple-500/20 rounded-xl p-3 space-y-1">
-                        <span className="block text-[10px] text-purple-300 font-bold uppercase tracking-wider">Great for:</span>
-                        <ul className="text-white/50 text-[11px] space-y-0.5 list-disc list-inside">
-                          <li>Netflix, JioCinema, Hotstar, Prime Video</li>
-                          <li>Any site that blocks embedding</li>
-                          <li>Presentations or anything on your screen</li>
-                        </ul>
+                      <div className="w-full bg-purple-950/20 border border-purple-500/20 rounded-xl p-3 space-y-2">
+                        <div className="flex items-start gap-2">
+                          <span className="text-lg">💡</span>
+                          <span className="text-purple-200/90 text-xs leading-relaxed">
+                            <strong>Instructions:</strong> Open a tab in your browser already with any OTT like <strong>JioCinema, Hotstar, Prime Video, Net Mirror, and Netflix</strong>. Then, click the button below and select that tab to share!
+                          </span>
+                        </div>
                       </div>
                       <button
                         type="button"
