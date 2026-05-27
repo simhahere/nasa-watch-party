@@ -148,7 +148,7 @@ export class WebcamMeshService {
         try {
           const offer = await pc.createOffer();
           await pc.setLocalDescription(offer);
-          await set(ref(database, `${signalPath}/offer`), offer.toJSON());
+          await set(ref(database, `${signalPath}/offer`), { sdp: offer.sdp, type: offer.type });
         } catch (err) {
           console.error('[WebcamMesh] Error creating offer:', err);
         }
@@ -199,7 +199,7 @@ export class WebcamMeshService {
           
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          await set(ref(database, `${signalPath}/answer`), answer.toJSON());
+          await set(ref(database, `${signalPath}/answer`), { sdp: answer.sdp, type: answer.type });
         } catch (err) {
           console.error('[WebcamMesh] Error handling offer:', err);
         }
