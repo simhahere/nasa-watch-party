@@ -40,15 +40,6 @@ function RoomCodePill({ code, isCopied, onCopy }: { code: string; isCopied: bool
   );
 }
 
-// --- WatchModeToggle ---
-function WatchModeToggle({ mode, onToggle }: { mode: 'synced' | 'free'; onToggle: () => void }) {
-  return (
-    <button onClick={onToggle} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${mode === 'synced' ? 'bg-cyan-500/15 border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25' : 'bg-purple-500/15 border-purple-500/30 text-purple-300 hover:bg-purple-500/25'}`}>
-      {mode === 'synced' ? <><Link2 size={12} className="syncing" />Synced</> : <><Gamepad2 size={12} />Free</>}
-    </button>
-  );
-}
-
 // --- ControlBtn ---
 function ControlBtn({ active, onIcon, offIcon, label, onToggle, danger = true }: { active: boolean; onIcon: React.ReactNode; offIcon: React.ReactNode; label: string; onToggle: () => void; danger?: boolean; }) {
   return (
@@ -149,7 +140,6 @@ export default function RoomPage() {
   const [currentVideoTitle, setCurrentVideoTitle] = useState('');
 
   const [isOwner, setIsOwner] = useState(false);
-  const [watchMode, setWatchMode] = useState<'synced' | 'free'>('synced');
   const [members, setMembers] = useState<Record<string, any>>({});
   const [streamQueue, setStreamQueue] = useState<any[]>([]);
 
@@ -165,7 +155,9 @@ export default function RoomPage() {
   const [isCopied, setIsCopied] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [popupMessages, setPopupMessages] = useState<Array<{ id: string; sender: string; text: string }>>([]);
+  const [roomNotifications, setRoomNotifications] = useState<Array<{ id: string; text: string; type: 'join' | 'leave' }>>([]);
   const prevMessagesLenRef = useRef(0);
+  const prevMembersRef = useRef<Record<string, any>>({});
 
   const syncRef = useRef<SyncService | null>(null);
   const videoAreaRef = useRef<HTMLDivElement>(null);
@@ -176,7 +168,8 @@ export default function RoomPage() {
   const [localMediaStream, setLocalMediaStream] = useState<MediaStream | null>(null);
   const [peerStreams, setPeerStreams] = useState<Record<string, MediaStream>>({});
 
-  const memberCount = Object.keys(members || {}).length;
+  const onlineMemberCount = Object.values(members || {}).filter((m: any) => m?.online).length;
+  const memberCount = onlineMemberCount;
   const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/room/${code}` : `https://nasa-25483.web.app/room/${code}`;
 
   // Online/offline
@@ -212,8 +205,26 @@ export default function RoomPage() {
     const u1 = svc.onPlayback(setExternalPlayback);
     const u2 = svc.onStreamUrl((url) => setStreamUrl(url));
     const u3 = svc.onEmbedUrl((url) => setEmbedUrl(url));
-    const u4 = svc.onWatchMode(setWatchMode);
     const u5 = svc.onMembers((m) => {
+      // Detect join/leave
+      const prevM = prevMembersRef.current;
+      Object.entries(m || {}).forEach(([uid, member]: [string, any]) => {
+        if (uid === user.uid) return;
+        const prev = prevM[uid];
+        if (member?.online && (!prev || !prev.online)) {
+          // User joined
+          const nid = generateId();
+          setRoomNotifications(prev => [...prev, { id: nid, text: `${member.name || 'Someone'} joined the room`, type: 'join' as const }]);
+          setTimeout(() => setRoomNotifications(prev => prev.filter(n => n.id !== nid)), 4000);
+        } else if (!member?.online && prev?.online) {
+          // User left
+          const nid = generateId();
+          setRoomNotifications(prev => [...prev, { id: nid, text: `${member.name || prev.name || 'Someone'} left the room`, type: 'leave' as const }]);
+          setTimeout(() => setRoomNotifications(prev => prev.filter(n => n.id !== nid)), 4000);
+        }
+      });
+      prevMembersRef.current = { ...(m || {}) };
+
       setMembers(m);
       const mine = m[user.uid];
       if (mine?.role === 'owner') {
@@ -250,7 +261,7 @@ export default function RoomPage() {
 
     const isCreator = localStorage.getItem('nasa_room_code') === code;
     svc.joinRoom(displayName, user.photoURL ?? '', isCreator ? 'owner' : 'member');
-    return () => { u1(); u2(); u3(); u4(); u5(); u6(); u8(); if (typeof u7 === 'function') u7(); svc.leaveRoom(); svc.cleanup(); };
+    return () => { u1(); u2(); u3(); u5(); u6(); u8(); if (typeof u7 === 'function') u7(); svc.leaveRoom(); svc.cleanup(); };
   }, [user, code, displayName]);
 
   // P2P viewer stream
@@ -319,6 +330,29 @@ export default function RoomPage() {
     webcamMeshRef.current?.updateLocalStream(localMediaStream);
   }, [localMediaStream]);
 
+  // Master unmount and back button navigation cleanup
+  useEffect(() => {
+    return () => {
+      console.log('[RoomClient] Component unmounted. Force cleaning room signals and hardware tracks.');
+      try {
+        syncRef.current?.leaveRoom();
+        syncRef.current?.cleanup();
+      } catch (e) {
+        console.warn('[RoomClient] Error during sync service exit:', e);
+      }
+      try {
+        webcamMeshRef.current?.cleanup();
+      } catch (e) {
+        console.warn('[RoomClient] Error during webcam mesh exit:', e);
+      }
+      try {
+        rtcRef.current?.cleanup();
+      } catch (e) {
+        console.warn('[RoomClient] Error during RTC service exit:', e);
+      }
+    };
+  }, []);
+
   // Vanishing popup chat
   useEffect(() => {
     const curLen = (messages || []).length, prevLen = prevMessagesLenRef.current;
@@ -369,18 +403,14 @@ export default function RoomPage() {
   const handleSelectFile = useCallback(() => { setShowVideoModal(false); }, []);
 
   const handlePlaybackChange = useCallback((state: any) => {
-    if (isOwner && watchMode === 'synced') syncRef.current?.publishPlayback({ ...state, ownerId: user?.uid });
-  }, [isOwner, watchMode, user]);
+    if (isOwner) syncRef.current?.publishPlayback({ ...state, ownerId: user?.uid });
+  }, [isOwner, user]);
 
   const handleCopyCode = useCallback(() => {
     navigator.clipboard.writeText(code).catch(() => {}); setIsCopied(true); setTimeout(() => setIsCopied(false), 2000);
   }, [code]);
 
   const handleCopyShare = useCallback(() => { navigator.clipboard.writeText(shareUrl).catch(() => {}); }, [shareUrl]);
-
-  const toggleWatchMode = useCallback(() => {
-    const n = watchMode === 'synced' ? 'free' : 'synced'; setWatchMode(n); syncRef.current?.setWatchMode?.(n);
-  }, [watchMode]);
 
   const handleGoogleSignIn = useCallback(async () => {
     try { const r = await signInWithPopup(auth, new GoogleAuthProvider()); if (r.user) { setUser(r.user); setDisplayName(r.user.displayName ?? 'Guest'); setShowNamePrompt(false); } } catch {}
@@ -403,11 +433,8 @@ export default function RoomPage() {
   }, []);
 
   const handleLeave = useCallback(() => {
-    syncRef.current?.leaveRoom(); syncRef.current?.cleanup();
-    webcamMeshRef.current?.cleanup(); rtcRef.current?.cleanup();
-    localMediaStream?.getTracks().forEach(t => t.stop());
     router.push('/');
-  }, [router, localMediaStream]);
+  }, [router]);
 
   // VideoGrid tiles
   const videoTiles = [
@@ -472,20 +499,23 @@ export default function RoomPage() {
           {!isOwner && p2pStream && (
             <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-300 text-xs font-semibold">
               <span className="w-2 h-2 rounded-full bg-purple-400 relative pulse-dot" /><span>Host Live</span>
-              <button type="button" onClick={() => setP2pStream(null)} className="ml-1 px-1.5 py-0.5 rounded bg-purple-500/20 hover:bg-purple-500/40 text-purple-100 text-[10px] uppercase font-bold border border-purple-500/30">Disconnect</button>
             </div>
           )}
         </div>
         <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
-          <WatchModeToggle mode={watchMode} onToggle={toggleWatchMode} />
           <button onClick={() => { setChatMode('sidebar'); setSidebarTab('members'); setShowSidebar(true); }} className="flex items-center gap-1.5 px-2.5 py-1.5 glass border border-white/10 rounded-xl hover:border-white/20 transition-all text-xs text-white/60 font-medium">
             <Users size={13} /><span>{memberCount}</span>
           </button>
           <button onClick={() => setShowSidebar(s => !s)} className="w-8 h-8 glass border border-white/10 rounded-xl flex items-center justify-center hover:border-white/20 hover:text-white text-white/50 transition-all" title={showSidebar ? 'Hide sidebar' : 'Show sidebar'}>
             {showSidebar ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
           </button>
-          <button onClick={handleLeave} className="w-8 h-8 glass border border-white/10 rounded-xl flex items-center justify-center hover:border-red-500/40 hover:text-red-400 text-white/50 transition-all" title="Leave room">
-            <LogOut size={14} />
+          <button 
+            onClick={handleLeave} 
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:border-red-500/50 transition-all font-bold text-xs shrink-0" 
+            title="Exit Room"
+          >
+            <LogOut size={13} />
+            <span>EXIT</span>
           </button>
         </div>
       </header>
@@ -500,9 +530,10 @@ export default function RoomPage() {
             localFile={null}
             p2pStream={p2pStream || screenStream}
             isOwner={isOwner}
-            watchMode={watchMode}
+            hostName={Object.values(members || {}).find((m: any) => m?.role === 'owner' || m?.uid === externalPlayback?.ownerId)?.name || 'Host'}
             onPlaybackChange={handlePlaybackChange}
             externalState={externalPlayback}
+            fullscreenContainerRef={videoAreaRef}
             ref={videoPlayerRef}
           />
 
@@ -521,6 +552,20 @@ export default function RoomPage() {
                   <div className="bg-black/80 backdrop-blur-xl border border-white/15 text-white text-sm px-4 py-2.5 rounded-2xl shadow-2xl max-w-[260px] break-words">
                     <span className="text-cyan-300 text-[10px] font-semibold block mb-0.5">{pm.sender}</span>
                     {pm.text}
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </div>
+
+          {/* Join/Leave room notifications */}
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 items-center pointer-events-none">
+            <AnimatePresence>
+              {roomNotifications.map(notif => (
+                <motion.div key={notif.id} initial={{ opacity: 0, y: -20, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -20, scale: 0.9 }} transition={{ type: 'spring', damping: 25, stiffness: 300 }}>
+                  <div className={`backdrop-blur-xl border text-xs font-semibold px-4 py-2 rounded-full shadow-2xl flex items-center gap-2 ${notif.type === 'join' ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-red-500/15 border-red-500/30 text-red-300'}`}>
+                    <span className={`w-2 h-2 rounded-full ${notif.type === 'join' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                    {notif.text}
                   </div>
                 </motion.div>
               ))}
@@ -588,9 +633,11 @@ export default function RoomPage() {
             <ControlBtn active={isCamOn} onIcon={<Video size={16} />} offIcon={<VideoOff size={16} />} label={isCamOn ? 'Cam On' : 'Cam Off'} onToggle={() => setIsCamOn(v => !v)} />
           </div>
           <div className="flex items-center gap-1.5">
-            <button onClick={() => setShowVideoModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-2xl glass border border-cyan-500/30 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all">
-              <Tv2 size={14} /><span className="hidden sm:block">Select Video</span>
-            </button>
+            {isOwner && (
+              <button onClick={() => setShowVideoModal(true)} className="flex items-center gap-1.5 px-3 py-2 rounded-2xl glass border border-cyan-500/30 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all">
+                <Tv2 size={14} /><span className="hidden sm:block">Select Video</span>
+              </button>
+            )}
             {streamQueue.length > 0 && (
               <button className="flex items-center gap-1.5 px-3 py-2 rounded-2xl text-xs font-semibold transition-all border glass border-white/10 text-white/50">
                 <Music2 size={14} /><span className="bg-purple-500 text-white rounded-full text-[10px] px-1 min-w-[16px] text-center">{streamQueue.length}</span>

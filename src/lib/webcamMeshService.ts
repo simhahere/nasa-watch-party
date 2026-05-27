@@ -67,16 +67,27 @@ export class WebcamMeshService {
 
   // Update room members list and presence
   updateMembers(members: Record<string, any>) {
-    this.lastMembers = members || {};
+    const currentMembers = members || {};
     
-    Object.entries(this.lastMembers).forEach(([peerUid, member]) => {
+    Object.entries(currentMembers).forEach(([peerUid, member]) => {
       if (peerUid === this.userId) return;
 
       // Connect if peer is online
       const shouldConnect = member.online;
       const hasConnection = this.peers.has(peerUid);
+      const prevMember = this.lastMembers[peerUid];
 
-      if (shouldConnect && !hasConnection) {
+      // Reconnect if cam or mic status changed, to avoid dynamic m-line order conflicts
+      const statusChanged = prevMember && (
+        prevMember.isCamOn !== member.isCamOn || 
+        prevMember.isMicOn !== member.isMicOn
+      );
+
+      if (shouldConnect && (!hasConnection || statusChanged)) {
+        if (hasConnection) {
+          console.log(`[WebcamMesh] Media status changed for peer ${peerUid}. Recreating peer connection.`);
+          this.disconnectPeer(peerUid);
+        }
         this.connectPeer(peerUid);
       } else if (!shouldConnect && hasConnection) {
         this.disconnectPeer(peerUid);
@@ -85,11 +96,13 @@ export class WebcamMeshService {
 
     // Cleanup peers that are no longer online
     Array.from(this.peers.keys()).forEach((peerUid) => {
-      const member = this.lastMembers[peerUid];
+      const member = currentMembers[peerUid];
       if (!member || !member.online) {
         this.disconnectPeer(peerUid);
       }
     });
+
+    this.lastMembers = { ...currentMembers };
   }
 
   private connectPeer(peerUid: string) {
@@ -156,6 +169,7 @@ export class WebcamMeshService {
 
       const answerRef = ref(database, `${signalPath}/answer`);
       const answerUnsub = onValue(answerRef, async (snap) => {
+        if (pc.signalingState === 'closed') return;
         if (!snap.exists() || pc.signalingState === 'stable') return;
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(snap.val()));
@@ -169,6 +183,7 @@ export class WebcamMeshService {
 
       const recCandRef = ref(database, `${signalPath}/receiverCandidates`);
       const recCandUnsub = onValue(recCandRef, (snap) => {
+        if (pc.signalingState === 'closed') return;
         snap.forEach((child) => {
           const candidateData = child.val();
           if (isRemoteDescriptionSet) {
@@ -190,6 +205,7 @@ export class WebcamMeshService {
 
       const offerRef = ref(database, `${signalPath}/offer`);
       const offerUnsub = onValue(offerRef, async (snap) => {
+        if (pc.signalingState === 'closed') return;
         if (!snap.exists() || pc.signalingState !== 'stable') return;
         try {
           const offer = snap.val();
@@ -208,6 +224,7 @@ export class WebcamMeshService {
 
       const initCandRef = ref(database, `${signalPath}/initiatorCandidates`);
       const initCandUnsub = onValue(initCandRef, (snap) => {
+        if (pc.signalingState === 'closed') return;
         snap.forEach((child) => {
           const candidateData = child.val();
           if (isRemoteDescriptionSet) {

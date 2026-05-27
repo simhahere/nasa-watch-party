@@ -50,7 +50,8 @@ export interface VideoPlayerProps {
   embedUrl: string | null;
   localFile: File | null;
   isOwner: boolean;
-  watchMode: 'synced' | 'free';
+  watchMode?: 'synced' | 'free';
+  hostName?: string;
   onPlaybackChange?: (state: PlaybackState) => void;
   externalState?: ExternalState | null;
   /** P2P stream received from host via WebRTC — shown to viewers */
@@ -59,6 +60,8 @@ export interface VideoPlayerProps {
   screenStream?: MediaStream | null;
   /** Called when video element is ready (for external stream capture) */
   onVideoReady?: (el: HTMLVideoElement) => void;
+  /** External ref for fullscreen — when provided, this element is fullscreened instead of the internal container */
+  fullscreenContainerRef?: React.RefObject<HTMLDivElement>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -322,12 +325,14 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
   embedUrl,
   localFile,
   isOwner,
-  watchMode,
+  watchMode = 'synced',
+  hostName = 'Host',
   onPlaybackChange,
   externalState,
   p2pStream,
   screenStream,
   onVideoReady,
+  fullscreenContainerRef,
 }, ref) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -337,6 +342,16 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
   const lastExternalStateRef = useRef<ExternalState | null>(null);
   const isSyncingRef = useRef(false);
   const driftCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Estimated host current position with speed drift compensation
+  const getHostTime = useCallback(() => {
+    if (!externalState) return 0;
+    if (externalState.status === 'paused') {
+      return externalState.position;
+    }
+    const elapsed = (Date.now() - externalState.updatedAt) / 1000;
+    return externalState.position + (elapsed * externalState.speed);
+  }, [externalState]);
 
   // ── Player state ──
   const [isPlaying, setIsPlaying] = useState(false);
@@ -469,6 +484,11 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
       setIsPlaying(true);
       if (isOwner && onPlaybackChange) {
         onPlaybackChange({ status: 'playing', position: video.currentTime, speed: video.playbackRate });
+      } else if (!isOwner && !isSyncingRef.current && externalState) {
+        // Strict Host Authority: viewers are strictly synced
+        if (externalState.status === 'paused') {
+          video.pause();
+        }
       }
     };
 
@@ -476,24 +496,25 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
       setIsPlaying(false);
       if (isOwner && onPlaybackChange) {
         onPlaybackChange({ status: 'paused', position: video.currentTime, speed: video.playbackRate });
+      } else if (!isOwner && !isSyncingRef.current && externalState) {
+        // Strict Host Authority: viewers are strictly synced
+        if (externalState.status === 'playing') {
+          video.play().catch(() => {});
+        }
       }
     };
 
-    const onTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-      // Update buffered
-      if (video.buffered.length > 0) {
-        setBuffered(video.buffered.end(video.buffered.length - 1));
-      }
-      // Owner: fire playback change on timeupdate (throttled by browser)
-      if (isOwner && onPlaybackChange && !video.paused) {
-        onPlaybackChange({ status: 'playing', position: video.currentTime, speed: video.playbackRate });
+    const onSeeking = () => {
+      if (!isOwner && !isSyncingRef.current && externalState) {
+        const hostTime = getHostTime();
+        if (Math.abs(video.currentTime - hostTime) > 1.5) {
+          isSyncingRef.current = true;
+          video.currentTime = hostTime;
+          setTimeout(() => { isSyncingRef.current = false; }, 150);
+        }
       }
     };
 
-    const onDurationChange = () => setDuration(video.duration);
-    const onVolumeChange = () => { setVolume(video.volume); setMuted(video.muted); };
-    const onRateChange = () => setSpeed(video.playbackRate as Speed);
     const onSeeked = () => {
       if (isOwner && onPlaybackChange) {
         onPlaybackChange({
@@ -510,6 +531,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
     video.addEventListener('durationchange', onDurationChange);
     video.addEventListener('volumechange', onVolumeChange);
     video.addEventListener('ratechange', onRateChange);
+    video.addEventListener('seeking', onSeeking);
     video.addEventListener('seeked', onSeeked);
 
     return () => {
@@ -519,17 +541,18 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
       video.removeEventListener('durationchange', onDurationChange);
       video.removeEventListener('volumechange', onVolumeChange);
       video.removeEventListener('ratechange', onRateChange);
+      video.removeEventListener('seeking', onSeeking);
       video.removeEventListener('seeked', onSeeked);
     };
-  }, [isOwner, onPlaybackChange]);
+  }, [isOwner, onPlaybackChange, getHostTime, externalState]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Sync logic (non-owner, synced mode)
   // ─────────────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (isOwner || watchMode !== 'synced' || !externalState) return;
-    if (p2pStream || screenStream) return; // Bypass sync for live streams
+    if (isOwner || !externalState) return;
+    if (p2pStream || screenStream) return;
 
     const video = videoRef.current;
     if (!video || mode !== 'video') return;
@@ -545,17 +568,15 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
       setIsSyncing(true);
 
       try {
-        // Seek if position differs by more than 2 seconds
-        if (Math.abs(video.currentTime - externalState.position) > 2) {
-          video.currentTime = externalState.position;
+        const hostTime = getHostTime();
+        if (Math.abs(video.currentTime - hostTime) > 2) {
+          video.currentTime = hostTime;
         }
 
-        // Sync playback rate
         if (video.playbackRate !== externalState.speed) {
           video.playbackRate = externalState.speed;
         }
 
-        // Sync play/pause
         if (externalState.status === 'playing') {
           if (video.paused) {
             await video.play().catch(() => {});
@@ -577,16 +598,35 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
 
     applySync();
 
-    // Start drift correction interval
     if (driftCheckRef.current) clearInterval(driftCheckRef.current);
     driftCheckRef.current = setInterval(() => {
       const v = videoRef.current;
-      if (!v || !externalState) return;
-      const drift = Math.abs(v.currentTime - externalState.position);
-      if (drift > 3) {
-        v.currentTime = externalState.position;
+      if (!v || !externalState || isSyncingRef.current) return;
+
+      if (externalState.status === 'playing' && v.paused) {
+        v.play().catch(() => {});
+      } else if (externalState.status === 'paused' && !v.paused) {
+        v.pause();
       }
-    }, 5000);
+
+      const hostTime = getHostTime();
+      const drift = Math.abs(v.currentTime - hostTime);
+
+      if (drift > 2) {
+        isSyncingRef.current = true;
+        v.currentTime = hostTime;
+        v.playbackRate = externalState.speed;
+        setTimeout(() => { isSyncingRef.current = false; }, 150);
+      } else if (drift > 0.3) {
+        v.playbackRate = v.currentTime < hostTime
+          ? externalState.speed * 1.08
+          : externalState.speed * 0.92;
+      } else {
+        if (v.playbackRate !== externalState.speed) {
+          v.playbackRate = externalState.speed;
+        }
+      }
+    }, 1000);
 
     return () => {
       if (driftCheckRef.current) {
@@ -594,7 +634,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
         driftCheckRef.current = null;
       }
     };
-  }, [externalState, isOwner, watchMode, mode]);
+  }, [externalState, isOwner, mode, getHostTime, p2pStream, screenStream]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Controls visibility (auto-hide after 3s)
@@ -628,13 +668,14 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
   }, []);
 
   const toggleFullscreen = useCallback(() => {
-    if (!containerRef.current) return;
+    const target = fullscreenContainerRef?.current || containerRef.current;
+    if (!target) return;
     if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(() => {});
+      target.requestFullscreen().catch(() => {});
     } else {
       document.exitFullscreen().catch(() => {});
     }
-  }, []);
+  }, [fullscreenContainerRef]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // Control handlers
@@ -688,6 +729,15 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      if (e.key === 'f') {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+
+      if (!isOwner) return; // Block seeking and pausing for viewers
+
       switch (e.key) {
         case ' ':
         case 'k':
@@ -702,9 +752,6 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
           e.preventDefault();
           skipSeconds(-5);
           break;
-        case 'f':
-          toggleFullscreen();
-          break;
         case 'm':
           handleMuteToggle();
           break;
@@ -712,7 +759,7 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [mode, togglePlay, skipSeconds, toggleFullscreen, handleMuteToggle]);
+  }, [mode, isOwner, togglePlay, skipSeconds, toggleFullscreen, handleMuteToggle]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // iFrame postMessage sync
@@ -744,8 +791,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
   // Render helpers
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Controls should be disabled for non-owner in synced mode
-  const controlsDisabled = watchMode === 'synced' && !isOwner;
+  // Controls should be disabled for non-owner
+  const controlsDisabled = !isOwner;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Empty State
@@ -811,12 +858,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
     return (
       <div className="relative w-full aspect-video bg-black rounded-2xl overflow-hidden">
         {/* Sync reminder strip */}
-        {watchMode === 'synced' && !isOwner && (
-          <div className="absolute top-0 left-0 right-0 z-20 bg-yellow-500/10 border-b border-yellow-500/20 backdrop-blur-sm px-4 py-2 flex items-center justify-between">
-            <span className="text-yellow-300/80 text-xs">
-              ⚡ Embedded player — Sync relies on host&apos;s playback commands
+        {!isOwner && (
+          <div className="absolute top-0 left-0 right-0 z-20 bg-yellow-500/10 border-b border-yellow-500/20 backdrop-blur-sm px-4 py-2 flex items-center justify-between font-medium">
+            <span className="text-yellow-300/80 text-xs flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+              Watching with {hostName} (Embedded Mode)
             </span>
-            <span className="text-yellow-300/60 text-xs">Manual sync may be needed</span>
+            <span className="text-yellow-300/60 text-[10px]">Host Controls Playback</span>
           </div>
         )}
 
@@ -830,10 +878,8 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
         />
 
         {/* Overlay badges */}
-        <div className="absolute top-3 right-3 z-20 flex flex-col items-end gap-2 pointer-events-none">
-          {watchMode === 'synced' && (
-            <SyncBadge synced={isSynced} syncing={isSyncing} watchMode={watchMode} isOwner={isOwner} />
-          )}
+        <div className="absolute top-12 right-3 z-20 flex flex-col items-end gap-2 pointer-events-none">
+          <SyncBadge synced={isSynced} syncing={isSyncing} isOwner={isOwner} />
           <div className="flex items-center gap-1.5 bg-black/60 border border-white/10 backdrop-blur-sm px-3 py-1.5 rounded-full text-xs text-white/60">
             <Film size={12} />
             <span>Embedded Player</span>
@@ -882,26 +928,15 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
       )}
 
       {/* ── Sync badge ── */}
-      {watchMode === 'synced' && (
-        <div className="absolute top-3 right-3 z-20 pointer-events-none flex flex-col items-end gap-2">
-          <SyncBadge synced={isSynced} syncing={isSyncing} watchMode={watchMode} isOwner={isOwner} />
-          {/* Quality badge for stream URLs */}
-          {streamUrl && (
-            <div className="flex items-center gap-1 bg-black/60 border border-white/10 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] font-bold text-white/70">
-              {(videoRef.current?.videoHeight ?? 0) >= 720 ? '🔵 HD' : '⚪ SD'}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Quality badge (non-synced, stream URL) ── */}
-      {watchMode !== 'synced' && streamUrl && (
-        <div className="absolute top-3 right-3 z-20 pointer-events-none">
+      <div className="absolute top-3 right-3 z-20 pointer-events-none flex flex-col items-end gap-2">
+        <SyncBadge synced={isSynced} syncing={isSyncing} isOwner={isOwner} />
+        {/* Quality badge for stream URLs */}
+        {streamUrl && (
           <div className="flex items-center gap-1 bg-black/60 border border-white/10 backdrop-blur-sm px-2 py-1 rounded-full text-[10px] font-bold text-white/70">
             {(videoRef.current?.videoHeight ?? 0) >= 720 ? '🔵 HD' : '⚪ SD'}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* ── Center Play Button (big) ── */}
       {!controlsDisabled && (
@@ -1017,8 +1052,13 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(function VideoP
       {/* ── Non-owner synced mode overlay message ── */}
       {controlsDisabled && (
         <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
-          <div className="bg-black/60 border border-white/10 backdrop-blur-sm px-4 py-2 rounded-full text-white/50 text-xs text-center whitespace-nowrap">
-            Playback controlled by host
+          <div className="bg-black/70 border border-white/15 backdrop-blur-xl px-4 py-2.5 rounded-2xl shadow-2xl flex items-center gap-2 text-white/80 text-xs">
+            <div className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-500"></span>
+            </div>
+            <span>Watching with <strong>{hostName}</strong></span>
+            <span className="text-[10px] bg-purple-500/25 border border-purple-500/30 text-purple-300 px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider ml-1">Host 👑</span>
           </div>
         </div>
       )}

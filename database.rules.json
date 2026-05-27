@@ -10,7 +10,8 @@
           }
         },
         "messages": {
-          ".write": true
+          ".write": true,
+          ".indexOn": ["timestamp"]
         },
         "playback": {
           ".write": true

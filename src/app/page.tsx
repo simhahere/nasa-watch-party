@@ -16,13 +16,13 @@ function StarField() {
   const stars = useRef<{ x: number; y: number; r: number; delay: number; dur: number }[]>([]);
 
   if (stars.current.length === 0) {
-    for (let i = 0; i < 160; i++) {
+    for (let i = 0; i < 90; i++) {
       stars.current.push({
         x: Math.random() * 100,
         y: Math.random() * 100,
-        r: Math.random() * 1.5 + 0.3,
+        r: Math.random() * 0.7 + 0.15,
         delay: Math.random() * 6,
-        dur: Math.random() * 4 + 3,
+        dur: Math.random() * 5 + 4,
       });
     }
   }
@@ -39,32 +39,25 @@ function StarField() {
         <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="white">
           <animate
             attributeName="opacity"
-            values="0.2;1;0.2"
+            values="0.1;0.9;0.1"
             dur={`${s.dur}s`}
             begin={`${s.delay}s`}
             repeatCount="indefinite"
           />
         </circle>
       ))}
-      {/* A few larger coloured accent stars */}
+      {/* Accent space markers */}
       {[
-        { cx: 15, cy: 25, fill: '#00d4ff' },
-        { cx: 72, cy: 18, fill: '#8b5cf6' },
-        { cx: 88, cy: 60, fill: '#00d4ff' },
-        { cx: 35, cy: 75, fill: '#ec4899' },
-        { cx: 55, cy: 42, fill: '#8b5cf6' },
+        { cx: 20, cy: 30, fill: '#00d4ff' },
+        { cx: 80, cy: 20, fill: '#8b5cf6' },
+        { cx: 85, cy: 65, fill: '#00d4ff' },
+        { cx: 30, cy: 80, fill: '#ec4899' },
       ].map((s, i) => (
-        <circle key={`accent-${i}`} cx={s.cx} cy={s.cy} r={1.2} fill={s.fill}>
+        <circle key={`accent-${i}`} cx={s.cx} cy={s.cy} r={0.7} fill={s.fill}>
           <animate
             attributeName="opacity"
-            values="0.4;1;0.4"
-            dur={`${2 + i}s`}
-            repeatCount="indefinite"
-          />
-          <animate
-            attributeName="r"
-            values="1;1.8;1"
-            dur={`${2 + i}s`}
+            values="0.2;0.8;0.2"
+            dur={`${4 + i}s`}
             repeatCount="indefinite"
           />
         </circle>
@@ -108,36 +101,36 @@ const FEATURES = [
     emoji: '🎬',
     title: 'Stream Any Video',
     desc: 'Local files, direct URLs, or NetMirror links — play anything together.',
-    color: 'rgba(0,212,255,0.15)',
-    border: 'rgba(0,212,255,0.25)',
-    glow: 'rgba(0,212,255,0.15)',
+    color: 'rgba(0,212,255,0.03)',
+    border: 'rgba(255,255,255,0.06)',
+    glow: 'rgba(0,212,255,0.06)',
   },
   {
     icon: <Zap className="w-6 h-6" />,
     emoji: '⚡',
     title: 'Perfect Sync',
     desc: 'Millisecond-precision playback sync keeps everyone watching the same frame.',
-    color: 'rgba(139,92,246,0.15)',
-    border: 'rgba(139,92,246,0.25)',
-    glow: 'rgba(139,92,246,0.15)',
+    color: 'rgba(139,92,246,0.03)',
+    border: 'rgba(255,255,255,0.06)',
+    glow: 'rgba(139,92,246,0.06)',
   },
   {
     icon: <MessageCircle className="w-6 h-6" />,
     emoji: '💬',
     title: 'Live Chat',
     desc: 'React, reply, and laugh together with real-time emoji reactions and messages.',
-    color: 'rgba(236,72,153,0.15)',
-    border: 'rgba(236,72,153,0.25)',
-    glow: 'rgba(236,72,153,0.15)',
+    color: 'rgba(236,72,153,0.03)',
+    border: 'rgba(255,255,255,0.06)',
+    glow: 'rgba(236,72,153,0.06)',
   },
   {
     icon: <Video className="w-6 h-6" />,
     emoji: '📹',
     title: 'Video Calls',
     desc: "See your friends' faces while you watch — movie nights feel real again.",
-    color: 'rgba(34,197,94,0.15)',
-    border: 'rgba(34,197,94,0.25)',
-    glow: 'rgba(34,197,94,0.15)',
+    color: 'rgba(34,197,94,0.03)',
+    border: 'rgba(255,255,255,0.06)',
+    glow: 'rgba(34,197,94,0.06)',
   },
 ];
 
@@ -215,18 +208,38 @@ export default function HomePage() {
         <StarField />
 
         {/* Ambient blobs */}
-        <div
-          className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full pointer-events-none"
+        <motion.div
+          animate={{
+            x: [0, 40, -30, 0],
+            y: [0, -50, 30, 0],
+            scale: [1, 1.15, 0.9, 1],
+          }}
+          transition={{
+            duration: 25,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="absolute top-1/4 left-1/4 w-80 h-80 rounded-full pointer-events-none mix-blend-screen"
           style={{
-            background: 'radial-gradient(circle, rgba(0,212,255,0.08) 0%, transparent 70%)',
-            filter: 'blur(40px)',
+            background: 'radial-gradient(circle, rgba(0, 212, 255, 0.04) 0%, transparent 80%)',
+            filter: 'blur(80px)',
           }}
         />
-        <div
-          className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full pointer-events-none"
+        <motion.div
+          animate={{
+            x: [0, -40, 30, 0],
+            y: [0, 50, -30, 0],
+            scale: [1, 0.9, 1.15, 1],
+          }}
+          transition={{
+            duration: 28,
+            repeat: Infinity,
+            ease: "easeInOut"
+          }}
+          className="absolute bottom-1/4 right-1/4 w-80 h-80 rounded-full pointer-events-none mix-blend-screen"
           style={{
-            background: 'radial-gradient(circle, rgba(139,92,246,0.08) 0%, transparent 70%)',
-            filter: 'blur(40px)',
+            background: 'radial-gradient(circle, rgba(139, 92, 246, 0.04) 0%, transparent 80%)',
+            filter: 'blur(80px)',
           }}
         />
 
@@ -239,98 +252,63 @@ export default function HomePage() {
         >
           {/* Badge */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
+            initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.2, duration: 0.5 }}
-            className="flex items-center gap-2 px-4 py-1.5 rounded-full glass border border-cyan-500/20 text-sm text-cyan-400 font-medium"
+            transition={{ delay: 0.15, duration: 0.6 }}
+            className="flex items-center gap-2 px-3.5 py-1.5 rounded-full glass border border-white/[0.04] text-[10px] uppercase font-black text-cyan-400 tracking-[0.2em] shadow-lg bg-black/40 animate-pulse"
           >
-            <Star className="w-3.5 h-3.5 fill-current" />
-            Watch Together · Anywhere in the World
+            <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+            Mission Control for Group Streaming
           </motion.div>
 
           {/* Title */}
           <motion.h1
-            className="text-5xl sm:text-6xl md:text-7xl font-black tracking-tight leading-tight"
-            initial={{ opacity: 0, y: 20 }}
+            className="text-5xl sm:text-7xl md:text-8xl font-black tracking-tight leading-none uppercase mt-2 mb-2"
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.7 }}
+            transition={{ delay: 0.25, duration: 0.75, ease: [0.16, 1, 0.3, 1] }}
           >
-            <span
-              className="text-glow-blue"
-              style={{
-                background: 'linear-gradient(135deg, #00d4ff 0%, #8b5cf6 60%, #ec4899 100%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
+            <span className="title-shine">
               NASA Watch Party
             </span>
           </motion.h1>
 
           {/* Subtitle */}
           <motion.p
-            className="text-lg sm:text-xl text-white/60 max-w-xl leading-relaxed"
+            className="text-sm sm:text-base text-white/50 max-w-lg leading-relaxed tracking-wide font-medium"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.45, duration: 0.7 }}
+            transition={{ delay: 0.4, duration: 0.7 }}
           >
-            Watch movies together in perfect sync —{' '}
-            <span className="text-white/80">from anywhere in the world</span>
+            Synchronized theatrical cinema streaming for remote crews. Watch high-definition media together in perfect real-time alignment, from anywhere in the cosmos.
           </motion.p>
 
-          {/* Floating stat cards */}
+          {/* Flat scientific telemetry dashboard (no button appearance) */}
           <motion.div
-            className="flex flex-wrap justify-center gap-4 mt-2"
+            className="flex items-center justify-center gap-6 mt-6 glass border border-white/5 rounded-2xl p-4 max-w-md w-full backdrop-blur-xl shadow-2xl bg-black/30 pointer-events-none"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.6, duration: 0.7 }}
+            transition={{ delay: 0.55, duration: 0.7 }}
           >
-            {/* 0ms Latency card */}
-            <motion.div
-              className="glass glow-blue rounded-2xl px-6 py-4 flex flex-col items-center gap-1"
-              whileHover={{ y: -4, scale: 1.04 }}
-              transition={{ type: 'spring', stiffness: 300 }}
-              style={{ minWidth: 130 }}
-            >
-              <span
-                className="text-3xl font-black text-glow-blue"
-                style={{
-                  background: 'linear-gradient(135deg,#00d4ff,#8b5cf6)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                0ms
-              </span>
-              <span className="text-xs text-white/50 tracking-wider uppercase font-semibold">
-                Latency
-              </span>
-            </motion.div>
+            {/* Latency Telemetry */}
+            <div className="flex-1 flex flex-col items-center gap-0.5 border-r border-white/10 px-4">
+              <div className="flex items-center gap-1.5 text-[9px] text-cyan-400 font-bold uppercase tracking-widest">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shadow-[0_0_6px_rgba(34,211,238,0.8)]" />
+                Network Delay
+              </div>
+              <span className="text-3xl font-black font-mono tracking-tight text-white/90">0ms</span>
+              <span className="text-[9px] text-white/30 tracking-widest uppercase font-bold">Latency Telemetry</span>
+            </div>
 
-            {/* HD Sync card */}
-            <motion.div
-              className="glass glow-purple rounded-2xl px-6 py-4 flex flex-col items-center gap-1"
-              whileHover={{ y: -4, scale: 1.04 }}
-              transition={{ type: 'spring', stiffness: 300 }}
-              style={{ minWidth: 130 }}
-            >
-              <span
-                className="text-3xl font-black"
-                style={{
-                  background: 'linear-gradient(135deg,#8b5cf6,#ec4899)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  backgroundClip: 'text',
-                }}
-              >
-                HD
-              </span>
-              <span className="text-xs text-white/50 tracking-wider uppercase font-semibold">
-                Sync
-              </span>
-            </motion.div>
+            {/* Sync Telemetry */}
+            <div className="flex-1 flex flex-col items-center gap-0.5 px-4">
+              <div className="flex items-center gap-1.5 text-[9px] text-purple-400 font-bold uppercase tracking-widest">
+                <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse shadow-[0_0_6px_rgba(192,132,252,0.8)]" />
+                Lock Status
+              </div>
+              <span className="text-3xl font-black font-mono tracking-tight text-white/90">HD Sync</span>
+              <span className="text-[9px] text-white/30 tracking-widest uppercase font-bold">Playback Alignment</span>
+            </div>
           </motion.div>
         </motion.div>
 

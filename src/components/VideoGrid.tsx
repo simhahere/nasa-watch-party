@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -34,6 +34,31 @@ function colorFromUid(uid: string): string {
   return `hsl(${hue}, 70%, 50%)`;
 }
 
+// ── Inline SVG: Camera-off icon ─────────────────────────────────────────────
+
+function CameraOffIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-red-400"
+    >
+      {/* camera body */}
+      <path d="M1 1l22 22" />
+      <path d="M21 21H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h6" />
+      <path d="M21 13V8a2 2 0 0 0-2-2h-1.5" />
+      {/* slashed circle (lens area) */}
+      <circle cx="12" cy="13" r="3" />
+    </svg>
+  );
+}
+
 // ── Sub-component: single bubble ────────────────────────────────────────────
 
 function VideoTileBubble({ tile }: { tile: VideoTile }) {
@@ -41,12 +66,23 @@ function VideoTileBubble({ tile }: { tile: VideoTile }) {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [showVideo, setShowVideo] = useState(false);
+
+  // Determine if video should actually be visible
+  const hasActiveVideoTrack =
+    isCamOn &&
+    !!stream &&
+    stream.getVideoTracks().some((t) => t.readyState === 'live' && !t.muted);
 
   // Attach stream to video element
   const setVideoRef = (el: HTMLVideoElement | null) => {
     videoRef.current = el;
-    if (el && el.srcObject !== stream) {
-      el.srcObject = stream;
+    if (el && hasActiveVideoTrack) {
+      if (el.srcObject !== stream) {
+        el.srcObject = stream;
+      }
+    } else if (el) {
+      el.srcObject = null;
     }
   };
 
@@ -58,11 +94,64 @@ function VideoTileBubble({ tile }: { tile: VideoTile }) {
     }
   };
 
-  // Keep srcObject in sync when stream changes
+  // ── CRITICAL: Clear srcObject when camera turns off ──
   useEffect(() => {
+    if (!isCamOn || !stream) {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      setShowVideo(false);
+      return;
+    }
+
+    // Camera is on and stream exists — attach it
     if (videoRef.current && videoRef.current.srcObject !== stream) {
       videoRef.current.srcObject = stream;
     }
+
+    // Check for active video tracks
+    const videoTracks = stream.getVideoTracks();
+    const hasLiveTrack = videoTracks.some(
+      (t) => t.readyState === 'live' && !t.muted
+    );
+    setShowVideo(hasLiveTrack);
+
+    // Listen for track events
+    const handleTrackEnded = () => {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      setShowVideo(false);
+    };
+
+    const handleTrackMuted = () => {
+      setShowVideo(false);
+    };
+
+    const handleTrackUnmuted = () => {
+      if (videoRef.current && stream) {
+        videoRef.current.srcObject = stream;
+      }
+      setShowVideo(true);
+    };
+
+    videoTracks.forEach((track) => {
+      track.addEventListener('ended', handleTrackEnded);
+      track.addEventListener('mute', handleTrackMuted);
+      track.addEventListener('unmute', handleTrackUnmuted);
+    });
+
+    return () => {
+      videoTracks.forEach((track) => {
+        track.removeEventListener('ended', handleTrackEnded);
+        track.removeEventListener('mute', handleTrackMuted);
+        track.removeEventListener('unmute', handleTrackUnmuted);
+      });
+    };
+  }, [isCamOn, stream]);
+
+  // Keep audio srcObject in sync
+  useEffect(() => {
     if (audioRef.current && audioRef.current.srcObject !== stream) {
       audioRef.current.srcObject = stream;
     }
@@ -79,39 +168,49 @@ function VideoTileBubble({ tile }: { tile: VideoTile }) {
         borderColor,
       ].join(' ')}
     >
-      {/* Video / avatar */}
-      {isCamOn && stream ? (
-        <video
-          ref={setVideoRef}
-          autoPlay
-          playsInline
-          muted={isLocal}
-          className="w-full h-full object-cover rounded-full"
-          style={isLocal ? { transform: 'scaleX(-1)' } : undefined}
-        />
-      ) : (
-        /* Avatar fallback */
-        <div
-          className="flex flex-col items-center justify-center h-full w-full"
-          style={{ background: 'rgba(0,0,0,0.6)' }}
-        >
-          {tile.photoURL ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={tile.photoURL}
-              alt={name}
-              className="w-full h-full object-cover rounded-full"
-            />
-          ) : (
+      {/* Video layer — always rendered, controlled via opacity for smooth transition */}
+      <video
+        ref={setVideoRef}
+        autoPlay
+        playsInline
+        muted={isLocal}
+        className="absolute inset-0 w-full h-full object-cover rounded-full transition-opacity duration-300"
+        style={{
+          opacity: showVideo ? 1 : 0,
+          ...(isLocal ? { transform: 'scaleX(-1)' } : {}),
+        }}
+      />
+
+      {/* Avatar fallback — visible when video is not active */}
+      <div
+        className="absolute inset-0 flex flex-col items-center justify-center w-full h-full transition-opacity duration-300"
+        style={{
+          opacity: showVideo ? 0 : 1,
+          background: 'rgba(0,0,0,0.6)',
+        }}
+      >
+        {tile.photoURL ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={tile.photoURL}
+            alt={name}
+            className="w-full h-full object-cover rounded-full"
+          />
+        ) : (
+          <>
             <div
               className="w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold text-white select-none"
               style={{ background: colorFromUid(uid) }}
             >
               {initials}
             </div>
-          )}
-        </div>
-      )}
+            {/* Camera-off icon below avatar */}
+            <div className="mt-1">
+              <CameraOffIcon size={14} />
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Remote audio — always present for remote peers */}
       {!isLocal && stream && (
@@ -119,20 +218,13 @@ function VideoTileBubble({ tile }: { tile: VideoTile }) {
       )}
 
       {/* Name label */}
-      <span className="absolute bottom-1 left-0 right-0 text-center text-[9px] font-bold text-white bg-black/50 truncate px-1 leading-4">
+      <span className="absolute bottom-1 left-0 right-0 text-center text-[9px] font-bold text-white bg-black/50 truncate px-1 leading-4 z-10">
         {isLocal ? 'You' : name}
       </span>
 
       {/* Mic active indicator */}
       {isMicOn && (
-        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.8)]" />
-      )}
-
-      {/* Cam-off overlay icon when no stream */}
-      {(!isCamOn || !stream) && !tile.photoURL && (
-        <div className="absolute inset-0 flex items-end justify-center pb-6 pointer-events-none">
-          {/* intentionally left empty — initials are the fallback */}
-        </div>
+        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-green-400 animate-pulse shadow-[0_0_6px_rgba(74,222,128,0.8)] z-10" />
       )}
     </div>
   );

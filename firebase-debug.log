@@ -1,0 +1,32 @@
+[debug] [2026-05-27T05:16:25.996Z] ----------------------------------------------------------------------
+[debug] [2026-05-27T05:16:26.000Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\firebase.js deploy --only hosting
+[debug] [2026-05-27T05:16:26.001Z] CLI Version:   15.18.0
+[debug] [2026-05-27T05:16:26.001Z] Platform:      win32
+[debug] [2026-05-27T05:16:26.001Z] Node Version:  v24.16.0
+[debug] [2026-05-27T05:16:26.001Z] Time:          Wed May 27 2026 10:46:26 GMT+0530 (India Standard Time)
+[debug] [2026-05-27T05:16:26.001Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-05-27T05:16:26.005Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-05-27T05:16:28.885Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-27T05:16:29.010Z] Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.
+    at GoogleAuth.getApplicationDefaultAsync (C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\google-auth-library\build\src\auth\googleauth.js:287:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async GoogleAuth._GoogleAuth_determineClient (C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\google-auth-library\build\src\auth\googleauth.js:834:32)
+    at async GoogleAuth.getClient (C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\google-auth-library\build\src\auth\googleauth.js:698:20)
+    at async GoogleAuth.getAccessToken (C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\google-auth-library\build\src\auth\googleauth.js:722:24)
+    at async autoAuth (C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\requireAuth.js:28:19)
+    at async requireAuth (C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\requireAuth.js:90:20)
+    at async requirePermissions (C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\requirePermissions.js:17:5)
+    at async C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\command.js:271:17
+[error] 
+[error] Error: Failed to authenticate, have you run firebase login?
+[debug] [2026-05-27T05:16:29.272Z] Error: EBUSY: resource busy or locked, unlink 'C:\FlutterProjects\nasa-web\firebase-debug.log'
+    at Object.unlinkSync (node:fs:1940:11)
+    at process.<anonymous> (C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\bin\cli.js:44:16)
+    at process.emit (node:events:521:24)
+    at process.exit (node:internal/process/per_thread:236:15)
+    at Timeout._onTimeout (C:\Users\naras\AppData\Local\npm-cache\_npx\7750544ccf494d8b\node_modules\firebase-tools\lib\errorOut.js:20:17)
+    at listOnTimeout (node:internal/timers:605:17)
+    at process.processTimers (node:internal/timers:541:7)
+[error] 
+[error] Error: An unexpected error has occurred.
