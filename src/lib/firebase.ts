@@ -8,6 +8,7 @@ import {
   User,
 } from 'firebase/auth';
 import { getDatabase, Database } from 'firebase/database';
+import { getFirestore, Firestore } from 'firebase/firestore';
 
 // Re-export User type from firebase/auth
 export type { User };
@@ -28,6 +29,7 @@ const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) 
 // Initialize Firebase services
 const auth: Auth = getAuth(app);
 const database: Database = getDatabase(app);
+const firestore: Firestore = getFirestore(app);
 
 // Google Auth Provider instance
 const googleProvider = new GoogleAuthProvider();
@@ -60,4 +62,4 @@ export async function signOut(): Promise<void> {
   }
 }
 
-export { app, auth, database };
+export { app, auth, database, firestore };
